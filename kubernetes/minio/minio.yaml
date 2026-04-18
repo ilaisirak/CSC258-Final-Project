@@ -1,0 +1,56 @@
+# Deployment defines how MinIO runs inside the Kubernetes cluster
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio  # Name of the MinIO deployment
+spec:
+  replicas: 1  # Single instance (no need for multiple replicas for local dev)
+  selector:
+    matchLabels:
+      app: minio  # Connects deployment to its pods
+
+  template:
+    metadata:
+      labels:
+        app: minio  # Label used for service discovery
+    spec:
+      containers:
+      - name: minio
+        image: minio/minio  # Official MinIO container image
+        args:
+          - server
+          - /data
+          - --console-address
+          - ":9001"  # Enables web UI on port 9001
+
+        env:
+        - name: MINIO_ROOT_USER
+          value: minioadmin  # Default username (for local dev only)
+        - name: MINIO_ROOT_PASSWORD
+          value: minioadmin  # Default password (DO NOT use in production)
+
+        ports:
+        - containerPort: 9000  # API port (used by services)
+        - containerPort: 9001  # Web console port
+
+---
+
+# Service exposes MinIO inside the Kubernetes cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio  # Stable DNS name used by other services
+spec:
+  selector:
+    app: minio  # Routes traffic to MinIO pods
+
+  ports:
+    - name: api
+      port: 9000        # Internal cluster port for object storage API
+      targetPort: 9000  # Container API port
+
+    - name: console
+      port: 9001        # Internal access to MinIO web UI
+      targetPort: 9001  # Container console port
+
+  type: ClusterIP  # Only accessible within the cluster (not exposed externally)

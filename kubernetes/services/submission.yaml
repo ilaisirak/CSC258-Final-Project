@@ -1,0 +1,41 @@
+# Deployment responsible for running and scaling service-submission
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-submission   # Name of the deployment
+spec:
+  replicas: 2               # Adjust based on load requirements
+  selector:
+    matchLabels:
+      app: service-submission  # Connects deployment to the pods it manages
+
+  template:
+    metadata:
+      labels:
+        app: service-submission  # Label used for service discovery
+    spec:
+      containers:
+      - name: service-submission
+        image: service-submission:latest  # Docker image to run
+
+        imagePullPolicy: IfNotPresent     # Tells Kubernetes to use local Kind-loaded images
+
+        ports:
+        - containerPort: 8000  # FastAPI's port
+
+---
+
+# Service routes traffic to the service-submission pods
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-submission  # Network name for the service
+spec:
+  selector:
+    app: service-submission  # Routes traffic to pods with this label
+
+  ports:
+    - port: 80          # Port exposed inside the cluster
+      targetPort: 8000  # Forwards traffic to container port
+
+  type: ClusterIP       # Internal-only access (not exposed to internet)
