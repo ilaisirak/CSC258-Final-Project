@@ -1,16 +1,34 @@
-from fastapi import APIRouter, UploadFile, File
-from app.config import STORAGE_TYPE
-from app.storage.minio_client import MinioClient
-from app.storage.gcs_client import GCSClient
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.database import get_db
+from app.models import Class
+from app.schemas import ClassResponse, ClassCreate
 
 router = APIRouter()
 
-def get_storage():
-    return MinioClient() if STORAGE_TYPE == "minio" else GCSClient()
+# Create a new class (professor)
+@router.post("/class", response_model=ClassResponse)
+async def create_class(payload: ClassCreate, db: AsyncSession = Depends(get_db)):
+    class_ = Class(**payload.model_dump())
+    db.add(class_)
+    await db.commit()
+    await db.refresh(class_)
+    return class_
 
-@router.post("/submit")
-async def submit_assignment(file: UploadFile = File(...)):
-    data = await file.read()
-    storage = get_storage()
-    storage.upload_file(file.filename, data)
-    return {"message": "File uploaded"}
+# Get a single class by id
+@router.get("/class/{class_id}", response_model=ClassResponse)
+async def get_class(class_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Class).where(Class.id == class_id)
+    )
+    class_ = result.scalar_one_or_none()
+    if not class_:
+        raise HTTPException(status_code=404, detail="Class not found")
+    return class_
+
+# Get all classes
+@router.get("/classes", response_model=list[ClassResponse])
+async def get_classes(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Class))
+    return result.scalars().all()

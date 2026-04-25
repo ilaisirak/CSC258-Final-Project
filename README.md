@@ -71,61 +71,88 @@ GCS_BUCKET=insert-google-bucket-name-here
 
 ---
 
-## Running Locally (Single Service)
+## Running Locally
+
+### Docker Compose (recommended for development)
+
+Use this for day-to-day development. Starts all services, databases, and MinIO
+together without needing a Kubernetes cluster.
 
 1. Clone the repository
 
 2. Create environment file (view above section)
 
-3. Start MinIO (Download: https://dl.min.io/server/minio/release/windows-amd64/minio.exe)
-
-* Navigate to minio.exe
-
-* Run following command (replace D:\ with repository directory)
+3. Start the full stack
 
 ```bash
-minio.exe server D:\
+docker-compose up --build
 ```
 
-4. Build and run a service
+4. To start only a specific service and its dependencies
 
 ```bash
-cd service-submission
-docker build -t service-submission .
-docker run --env-file ../.env -p 8000:8000 service-submission
+docker-compose up --build service-assignment postgres-assignments minio
 ```
 
-5. Access API
+5. Available endpoints once running
 
-* http://localhost:8000
-* http://localhost:8000/docs
+| Service            | URL                          |
+|--------------------|------------------------------|
+| Frontend           | http://localhost:3000        |
+| service-assignment | http://localhost:8001/health |
+| service-class      | http://localhost:8002/health |
+| service-grading    | http://localhost:8003/health |
+| service-submission | http://localhost:8004/health |
+| service-user       | http://localhost:8005/health |
+| MinIO Console      | http://localhost:9001        |
+
+6. To stop all running containers
+
+```bash
+docker-compose down
+```
+
+To stop and wipe all local database and storage volumes (clean slate):
+
+```bash
+docker-compose down -v
+```
 
 ---
 
-## Running Locally with Kind
+### kind (Kubernetes in Docker)
 
-1. Ensure [Kind](https://kind.sigs.k8s.io/) and `kubectl` are installed
+Use this when you want to test your Kubernetes manifests locally before deploying
+to GKE. Requires [kind](https://kind.sigs.k8s.io/) and 
+[kubectl](https://kubernetes.io/docs/tasks/tools/) to be installed.
 
-2. Create your environment file (see above section)
+1. Create a local cluster
 
-3. Run the deployment script from the project root:
-
-```bat
-local_deploy.bat
+```bash
+kind create cluster --name grading-portal
 ```
 
-This will automatically:
-- Create the Kind cluster `csc258-finalproject-cluster` (if it doesn't exist)
-- Build Docker images for all services
-- Load images into the Kind cluster
-- Deploy MinIO via `k8/minio/`
-- Apply all Kubernetes manifests from `k8/`
-- Wait for all service rollouts to complete
+2. Load your service images into the cluster (repeat for each service)
 
-4. Access API
+```bash
+kind load docker-image service-assignment --name grading-portal
+kind load docker-image service-class --name grading-portal
+kind load docker-image service-grading --name grading-portal
+kind load docker-image service-submission --name grading-portal
+kind load docker-image service-user --name grading-portal
+```
 
-* http://localhost:8000
-* http://localhost:8000/docs
+3. Apply your Kubernetes manifests
+
+```bash
+kubectl apply -f kubernetes/
+```
+
+4. To delete the cluster when done
+
+```bash
+kind delete cluster --name grading-portal
+```
 
 ---
 
