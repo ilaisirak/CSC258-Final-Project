@@ -1,0 +1,118 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-6);
+  background: var(--c-surface-2);
+  border: 2px dashed var(--c-border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--c-text-muted);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.zone:hover,
+.over {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+}
+
+.zone:focus-visible {
+  outline: none;
+  border-color: var(--c-accent);
+  box-shadow: var(--c-focus-ring);
+}
+
+.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cloud {
+  color: var(--c-accent);
+}
+
+.title {
+  font-size: var(--fs-base);
+  color: var(--c-text);
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--c-text-subtle);
+}
+
+.input {
+  display: none;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+}
+
+.fileIcon {
+  color: var(--c-accent);
+  flex-shrink: 0;
+}
+
+.meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.size {
+  font-size: var(--fs-xs);
+  color: var(--c-text-subtle);
+}
+
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--c-text-subtle);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.remove:hover {
+  background: var(--c-surface-hover);
+  color: var(--c-danger);
+}

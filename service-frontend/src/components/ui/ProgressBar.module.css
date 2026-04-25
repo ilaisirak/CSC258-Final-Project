@@ -1,0 +1,54 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+.label {
+  font-weight: var(--fw-medium);
+}
+
+.value {
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  width: 100%;
+  background: var(--c-bg-sunken);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.sm {
+  height: 4px;
+}
+.md {
+  height: 8px;
+}
+
+.fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transition: width var(--dur-base) var(--ease-out);
+}
+
+.accent {
+  background: var(--c-accent);
+}
+.success {
+  background: var(--c-success);
+}
+.warning {
+  background: var(--c-warning);
+}
+.danger {
+  background: var(--c-danger);
+}

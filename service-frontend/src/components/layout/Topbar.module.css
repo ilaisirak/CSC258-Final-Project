@@ -1,0 +1,115 @@
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--topbar-h);
+  padding: 0 var(--space-5);
+  background: rgba(250, 246, 241, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--c-border);
+}
+
+[data-theme="dark"] .bar {
+  background: rgba(26, 22, 18, 0.85);
+}
+
+.left,
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.menuBtn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  color: var(--c-text-muted);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.menuBtn:hover {
+  background: var(--c-surface-hover);
+  color: var(--c-text);
+}
+
+.title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+
+.userWrap {
+  position: relative;
+}
+
+.user {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.user:hover {
+  background: var(--c-surface-hover);
+}
+
+.userMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.userName {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--c-text);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  min-width: 180px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-1);
+  z-index: var(--z-sticky);
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  font-size: var(--fs-sm);
+  color: var(--c-text);
+  border-radius: var(--radius-sm);
+}
+
+.menuItem:hover {
+  background: var(--c-surface-hover);
+}
+
+@media (max-width: 900px) {
+  .menuBtn {
+    display: inline-flex;
+  }
+  .userName {
+    display: none;
+  }
+}
