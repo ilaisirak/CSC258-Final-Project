@@ -1,0 +1,66 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 40px;
+  padding: 0 2.25rem 0 var(--space-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: var(--fs-base);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  box-shadow: var(--c-focus-ring);
+}
+
+.select:disabled {
+  background: var(--c-bg-sunken);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.chevron {
+  position: absolute;
+  right: var(--space-3);
+  pointer-events: none;
+  color: var(--c-text-subtle);
+  font-size: var(--fs-sm);
+}
+
+.error .select {
+  border-color: var(--c-danger);
+}
+
+.help {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.helpError {
+  color: var(--c-danger);
+}

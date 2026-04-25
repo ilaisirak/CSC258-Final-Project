@@ -1,0 +1,75 @@
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+
+.statRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.statLabel {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.statValue {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.assignRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: inherit;
+}
+
+.due[data-tone="warning"] {
+  color: var(--c-warning);
+}
+.due[data-tone="danger"] {
+  color: var(--c-danger);
+}
+
+.roster {
+  display: flex;
+  flex-direction: column;
+}
+
+.rosterItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.rosterItem:last-child {
+  border-bottom: none;
+}
+
+.rosterMeta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rosterName {
+  font-weight: var(--fw-medium);
+}
+
+.rosterEmail {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}

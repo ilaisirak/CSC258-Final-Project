@@ -1,0 +1,179 @@
+services:
+
+  # ── FRONTEND ──────────────────────────────────────────────
+  frontend:
+    build: ./service-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - service-assignment
+      - service-class
+      - service-grading
+      - service-submission
+      - service-user
+
+  # ── BACKEND SERVICES ──────────────────────────────────────
+  service-assignment:
+    build: ./service-assignment
+    ports:
+      - "8001:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-assignments:5432/assignments
+      STORAGE_TYPE: minio
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres-assignments:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  service-class:
+    build: ./service-class
+    ports:
+      - "8002:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-class:5432/class
+      STORAGE_TYPE: minio
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres-class:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  service-grading:
+    build: ./service-grading
+    ports:
+      - "8003:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-grading:5432/grading
+      STORAGE_TYPE: minio
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres-grading:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  service-submission:
+    build: ./service-submission
+    ports:
+      - "8004:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-submission:5432/submission
+      STORAGE_TYPE: minio
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres-submission:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  service-user:
+    build: ./service-user
+    ports:
+      - "8005:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-user:5432/user
+      STORAGE_TYPE: minio
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+
+  # ── DATABASES ─────────────────────────────────────────────
+  postgres-assignments:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: assignments
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pgdata-assignments:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d assignments"]
+      interval: 5s
+      retries: 5
+
+  postgres-class:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: class
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pgdata-class:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d class"]
+      interval: 5s
+      retries: 5
+
+  postgres-grading:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: grading
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pgdata-grading:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d grading"]
+      interval: 5s
+      retries: 5
+
+  postgres-submission:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: submission
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pgdata-submission:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d submission"]
+      interval: 5s
+      retries: 5
+
+  postgres-user:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: user
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pgdata-user:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d user"]
+      interval: 5s
+      retries: 5
+
+  # ── MINIO (shared file storage) ───────────────────────────
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3-compatible API (your services talk to this)
+      - "9001:9001"   # MinIO web console (browser UI)
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      retries: 5
+
+# ── VOLUMES ───────────────────────────────────────────────
+volumes:
+  pgdata-assignments:
+  pgdata-class:
+  pgdata-grading:
+  pgdata-submission:
+  pgdata-user:
+  minio-data:

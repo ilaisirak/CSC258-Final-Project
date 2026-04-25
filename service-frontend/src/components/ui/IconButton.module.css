@@ -1,0 +1,51 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--c-text-muted);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+  border: 1px solid transparent;
+}
+
+.btn :global(svg) {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.sm {
+  width: 30px;
+  height: 30px;
+  font-size: var(--fs-sm);
+}
+.md {
+  width: 36px;
+  height: 36px;
+  font-size: var(--fs-base);
+}
+.lg {
+  width: 42px;
+  height: 42px;
+  font-size: var(--fs-md);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--c-surface-hover);
+  color: var(--c-text);
+}
+
+.solid {
+  background: var(--c-surface);
+  border-color: var(--c-border);
+  color: var(--c-text);
+}
+.solid:hover:not(:disabled) {
+  background: var(--c-surface-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

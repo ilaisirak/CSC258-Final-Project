@@ -1,0 +1,115 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  background: var(--c-bg-elevated);
+  border-right: 1px solid var(--c-border);
+  padding: var(--space-5) var(--space-3);
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-5);
+}
+
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-accent);
+}
+
+.brandName {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  line-height: 1.1;
+}
+
+.brandRole {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  margin-top: 2px;
+}
+
+.nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--c-border);
+}
+
+.nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-3);
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--c-text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.link:hover {
+  background: var(--c-surface-hover);
+  color: var(--c-text);
+}
+
+.active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+
+.active .linkIcon {
+  color: var(--c-accent);
+}
+
+.linkIcon {
+  flex-shrink: 0;
+}
+
+.footer {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--c-border);
+}
+
+.scrim {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: calc(var(--z-modal) - 1);
+    transform: translateX(-100%);
+    transition: transform var(--dur-base) var(--ease-out);
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 14, 8, 0.4);
+    z-index: calc(var(--z-modal) - 2);
+  }
+}

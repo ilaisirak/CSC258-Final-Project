@@ -1,0 +1,33 @@
+.s {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--c-bg-sunken) 0%,
+    var(--c-surface-hover) 50%,
+    var(--c-bg-sunken) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.sm {
+  border-radius: var(--radius-xs);
+}
+.md {
+  border-radius: var(--radius-sm);
+}
+.lg {
+  border-radius: var(--radius-md);
+}
+.pill {
+  border-radius: var(--radius-pill);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

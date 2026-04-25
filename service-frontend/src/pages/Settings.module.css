@@ -1,0 +1,78 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sectionHeader h3 {
+  font-size: var(--fs-lg);
+}
+
+.sectionHeader p {
+  margin-top: 2px;
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.whoName {
+  font-weight: var(--fw-semibold);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 600px) {
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.themeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.themePreview {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--c-border);
+}
+
+.swatch[data-tone="bg"] {
+  background: var(--c-bg);
+}
+.swatch[data-tone="accent"] {
+  background: var(--c-accent);
+}
+.swatch[data-tone="muted"] {
+  background: var(--c-bg-sunken);
+}
