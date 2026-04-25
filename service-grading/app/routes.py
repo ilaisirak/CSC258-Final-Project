@@ -3,67 +3,61 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.models import Grade
-from app.schemas import GradeUpsert, GradeResponse
+from app.schemas import GradeUpsert, GradeResponse, GradeUpdate
 
 router = APIRouter()
 
-# Assign a grade (professor)
-@router.post("/grades", response_model=GradeResponse)
-async def create_grade(payload: GradeUpsert, db: AsyncSession = Depends(get_db)):
-    # prevent duplicate grades for the same submission
+@router.post("/grading", response_model=GradeResponse)
+async def upsert_grade(payload: GradeUpsert, db: AsyncSession = Depends(get_db)):
     existing = await db.execute(
-        select(Grade).where(Grade.submission_id == payload.submission_id)
+        select(Grade).where(Grade.submission_id == payload.submissionId)
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Submission already graded")
+    grade = existing.scalar_one_or_none()
 
-    grade = Grade(**payload.model_dump())
-    db.add(grade)
+    if grade:
+        grade.score = payload.score
+        grade.points_possible = payload.pointsPossible
+        grade.feedback = payload.feedback
+        grade.graded_by_id = payload.gradedById
+    else:
+        grade = Grade(
+            submission_id=payload.submissionId,
+            score=payload.score,
+            points_possible=payload.pointsPossible,
+            feedback=payload.feedback,
+            graded_by_id=payload.gradedById,
+        )
+        db.add(grade)
+
     await db.commit()
     await db.refresh(grade)
     return grade
 
-# Get a single grade by id
-@router.get("/grades/{grade_id}", response_model=GradeResponse)
-async def get_grade(grade_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Grade).where(Grade.id == grade_id)
-    )
+@router.get("/grading/{grade_id}", response_model=GradeResponse)
+async def get_grade(grade_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Grade).where(Grade.id == grade_id))
     grade = result.scalar_one_or_none()
     if not grade:
         raise HTTPException(status_code=404, detail="Grade not found")
     return grade
 
-# Get all grades for a specific student
-@router.get("/grades/student/{student_id}", response_model=list[GradeResponse])
-async def get_grades_by_student(student_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Grade).where(Grade.student_id == student_id)
-    )
+@router.get("/grading", response_model=list[GradeResponse])
+async def get_grades(studentId: str = None, db: AsyncSession = Depends(get_db)):
+    query = select(Grade)
+    if studentId:
+        query = query.where(Grade.student_id == studentId)
+    result = await db.execute(query)
     return result.scalars().all()
 
-# Get all grades for a specific assignment (professor view)
-@router.get("/grades/assignment/{assignment_id}", response_model=list[GradeResponse])
-async def get_grades_by_assignment(assignment_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Grade).where(Grade.assignment_id == assignment_id)
-    )
-    return result.scalars().all()
-
-# Update a grade (professor)
-@router.patch("/grades/{grade_id}", response_model=GradeResponse)
-async def update_grade(grade_id: int, payload: GradeUpsert, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Grade).where(Grade.id == grade_id)
-    )
+@router.patch("/grading/{grade_id}", response_model=GradeResponse)
+async def update_grade(grade_id: str, payload: GradeUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Grade).where(Grade.id == grade_id))
     grade = result.scalar_one_or_none()
     if not grade:
         raise HTTPException(status_code=404, detail="Grade not found")
-
-    grade.grade = payload.grade
+    grade.score = payload.score
     if payload.feedback is not None:
         grade.feedback = payload.feedback
-
     await db.commit()
     await db.refresh(grade)
     return grade
