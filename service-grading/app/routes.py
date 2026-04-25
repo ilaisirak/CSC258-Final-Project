@@ -1,61 +1,69 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
-from app.models import User
-from app.schemas import UserCreate, UserSignIn, UserResponse
+from app.models import Grade
+from app.schemas import GradeUpsert, GradeResponse
 
 router = APIRouter()
 
-# Called by AuthContext on every page load to restore session
-@router.get("/users/me", response_model=UserResponse)
-async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = request.headers.get("X-User-Id")
-    if not user_id:
-        return None
-    result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
-
-# Called by AuthContext.signIn
-@router.post("/users/sign-in", response_model=UserResponse)
-async def sign_in(payload: UserSignIn, db: AsyncSession = Depends(get_db)):
-    # For now, look up by name + role. Once you add passwords this changes.
-    result = await db.execute(
-        select(User).where(User.name == payload.name, User.role == payload.role)
+# Assign a grade (professor)
+@router.post("/grades", response_model=GradeResponse)
+async def create_grade(payload: GradeUpsert, db: AsyncSession = Depends(get_db)):
+    # prevent duplicate grades for the same submission
+    existing = await db.execute(
+        select(Grade).where(Grade.submission_id == payload.submission_id)
     )
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Submission already graded")
 
-# Called by AuthContext.signOut — stateless for now
-@router.post("/users/sign-out")
-async def sign_out():
-    return {"message": "Signed out"}
+    grade = Grade(**payload.model_dump())
+    db.add(grade)
+    await db.commit()
+    await db.refresh(grade)
+    return grade
 
-# Get all users — used by roster/add student flows
-@router.get("/users", response_model=list[UserResponse])
-async def list_users(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User))
+# Get a single grade by id
+@router.get("/grades/{grade_id}", response_model=GradeResponse)
+async def get_grade(grade_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Grade).where(Grade.id == grade_id)
+    )
+    grade = result.scalar_one_or_none()
+    if not grade:
+        raise HTTPException(status_code=404, detail="Grade not found")
+    return grade
+
+# Get all grades for a specific student
+@router.get("/grades/student/{student_id}", response_model=list[GradeResponse])
+async def get_grades_by_student(student_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Grade).where(Grade.student_id == student_id)
+    )
     return result.scalars().all()
 
-# Get a single user by ID — called by other services
-@router.get("/users/{user_id}", response_model=UserResponse)
-async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+# Get all grades for a specific assignment (professor view)
+@router.get("/grades/assignment/{assignment_id}", response_model=list[GradeResponse])
+async def get_grades_by_assignment(assignment_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Grade).where(Grade.assignment_id == assignment_id)
+    )
+    return result.scalars().all()
 
-# Create a user
-@router.post("/users", response_model=UserResponse)
-async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
-    existing = await db.execute(select(User).where(User.email == payload.email))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Email already registered")
-    user = User(**payload.model_dump())
-    db.add(user)
+# Update a grade (professor)
+@router.patch("/grades/{grade_id}", response_model=GradeResponse)
+async def update_grade(grade_id: int, payload: GradeUpsert, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Grade).where(Grade.id == grade_id)
+    )
+    grade = result.scalar_one_or_none()
+    if not grade:
+        raise HTTPException(status_code=404, detail="Grade not found")
+
+    grade.grade = payload.grade
+    if payload.feedback is not None:
+        grade.feedback = payload.feedback
+
     await db.commit()
-    await db.refresh(user)
-    return user
+    await db.refresh(grade)
+    return grade
