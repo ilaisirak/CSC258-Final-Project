@@ -58,13 +58,22 @@ Environment variables are used to switch between local and cloud setups.
 Example .env:
 
 ```bash
+# Storage
 STORAGE_TYPE=minio
-
-MINIO_ENDPOINT=localhost:9000
+MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
+GCS_BUCKET=TBD
 
-GCS_BUCKET=insert-google-bucket-name-here
+# Frontend API mode
+VITE_API_MODE=mock
+
+# Per-namespace overrides — mock -> http as each service is confirmed working
+VITE_API_USERS=http
+VITE_API_CLASSES=http
+VITE_API_ASSIGNMENTS=http
+VITE_API_SUBMISSIONS=mock
+VITE_API_GRADING=mock
 ```
 
 `.env` files are not committed. Each developer creates their own.
