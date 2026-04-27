@@ -68,12 +68,12 @@ GCS_BUCKET=TBD
 # Frontend API mode
 VITE_API_MODE=mock
 
-# Per-namespace overrides — mock -> http as each service is confirmed working
+# Per-namespace overrides: mock -> http as each service is confirmed working
 VITE_API_USERS=http
 VITE_API_CLASSES=http
 VITE_API_ASSIGNMENTS=http
 VITE_API_SUBMISSIONS=mock
-VITE_API_GRADING=mock
+VITE_API_GRADING=http
 ```
 
 `.env` files are not committed. Each developer creates their own.
@@ -105,15 +105,15 @@ docker-compose up --build service-assignment postgres-assignments minio
 
 5. Available endpoints once running
 
-| Service            | URL                          |
-|--------------------|------------------------------|
-| Frontend           | http://localhost:3000        |
-| service-assignment | http://localhost:8001/health |
-| service-class      | http://localhost:8002/health |
-| service-grading    | http://localhost:8003/health |
-| service-submission | http://localhost:8004/health |
-| service-user       | http://localhost:8005/health |
-| MinIO Console      | http://localhost:9001        |
+| Service            | URL                                                        |
+|--------------------|------------------------------------------------------------|
+| Frontend           | http://localhost:3000                                      |
+| service-assignment | http://localhost:8001/health OR http://localhost:8001/docs |
+| service-class      | http://localhost:8002/health OR http://localhost:8002/docs |
+| service-grading    | http://localhost:8003/health OR http://localhost:8003/docs |
+| service-submission | http://localhost:8004/health OR http://localhost:8004/docs |
+| service-user       | http://localhost:8005/health OR http://localhost:8005/docs |
+| MinIO Console      | http://localhost:9001                                      |
 
 6. To stop all running containers
 
@@ -129,7 +129,7 @@ docker-compose down -v
 
 ---
 
-### kind (Kubernetes in Docker)
+### kind (Kubernetes in Docker) - Not yet tested
 
 Use this when you want to test your Kubernetes manifests locally before deploying
 to GKE. Requires [kind](https://kind.sigs.k8s.io/) and 
@@ -165,7 +165,7 @@ kind delete cluster --name grading-portal
 
 ---
 
-## Cloud Deployment (GCP)
+## Cloud Deployment (GCP) - Not yet tested
 
 The system is designed for deployment on Google Cloud Platform.
 
@@ -197,17 +197,15 @@ Changes for cloud:
 **Jeremy Auradou**
 
 * Establishing initial code environment (setting up MinIO, kind, FastAPI, file structure, etc.)
-* README
-* [Contribution]
+* Set up assignment, class, grading, and user services.
+* Made README
 
 **Elliot Harrison**
 
-* [Contribution]
-* [Contribution]
+* Quality control, code review
 
 **Ilai Sirak**
 
-* [Contribution]
-* [Contribution]
+* Frontend
 
 ---
