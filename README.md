@@ -200,7 +200,7 @@ Changes for cloud:
 * Set up assignment, class, grading, and user services.
 * Made README
 
-**Elliot Harrison**
+**Elliott Harrison**
 
 * Quality control, code review
 
