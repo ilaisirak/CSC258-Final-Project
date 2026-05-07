@@ -1,5 +1,6 @@
 # Pydantic models for request validation and response serialization.
 # Field names use camelCase to match the frontend API contract.
+# Aliases map camelCase fields to the snake_case column names in the ORM model.
 
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
@@ -10,6 +11,8 @@ SubmissionStatus = Literal["submitted", "graded", "returned"]
 
 
 # Represents a single uploaded file attached to a submission.
+# url is populated at read time from MinIO via a pre-signed URL —
+# it is never stored in the database.
 class FileRefResponse(BaseModel):
     id: UUID
     name: str
@@ -23,6 +26,7 @@ class FileRefResponse(BaseModel):
 # Shapes the response returned by all submission endpoints.
 # The grade field is intentionally absent — it is fetched separately
 # from the grading service when needed by the frontend.
+# files is always populated with pre-signed URLs by the route handler.
 class SubmissionResponse(BaseModel):
     id: UUID
     assignmentId: UUID = Field(alias="assignment_id")

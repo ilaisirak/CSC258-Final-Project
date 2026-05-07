@@ -1,8 +1,9 @@
-# Defines the Class ORM model, which maps to the classes table
-# in the PostgreSQL database owned by this service.
+# Defines the Class and Enrollment ORM models for the class service.
+# Enrollment acts as a join table between classes and students,
+# owned by this service since enrollment is a property of a class
 
 from uuid import uuid4
-from sqlalchemy import UUID, Column, Integer, String, DateTime
+from sqlalchemy import UUID, Column, Integer, String, DateTime, UniqueConstraint
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -35,3 +36,20 @@ class Class(Base):
     term_ends_on   = Column(String, nullable=False)
 
     created_at     = Column(DateTime, server_default=func.now())
+
+class Enrollment(Base):
+    __tablename__ = "enrollments"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+
+    # Foreign references — plain UUIDs, no FK constraints since
+    # class and user data live in separate databases.
+    class_id    = Column(UUID(as_uuid=True), nullable=False, index=True)
+    student_id  = Column(UUID(as_uuid=True), nullable=False, index=True)
+
+    enrolled_at = Column(DateTime, server_default=func.now())
+
+    # Prevent a student from being enrolled in the same class twice.
+    __table_args__ = (
+        UniqueConstraint("class_id", "student_id", name="uq_enrollment"),
+    )

@@ -2,6 +2,8 @@
 # Field names use camelCase to match the frontend API contract.
 # Aliases map camelCase fields to the snake_case column names in the ORM model.
 
+from datetime import datetime
+
 from pydantic import BaseModel, computed_field, Field, model_validator
 from typing import Optional, Literal, Any
 from uuid import UUID
@@ -81,3 +83,18 @@ class ClassResponse(BaseModel):
                 }
             }
         return data
+    
+# Represents a single enrollment record.
+class EnrollmentResponse(BaseModel):
+    id: UUID
+    classId: UUID      = Field(alias="class_id")
+    studentId: UUID    = Field(alias="student_id")
+    enrolledAt: datetime = Field(alias="enrolled_at")
+
+    model_config = {"from_attributes": True, "populate_by_name": True, "by_alias": True}
+
+
+# Request body for adding a student to a class by email.
+# The class service calls the user service to resolve the email to a UUID.
+class AddStudentRequest(BaseModel):
+    email: str
