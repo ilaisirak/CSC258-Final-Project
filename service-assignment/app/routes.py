@@ -17,7 +17,8 @@ async def create_assignment(payload: AssignmentCreate, db: AsyncSession = Depend
         class_id=payload.classId,
         title=payload.title,
         description=payload.description,
-        due_at=payload.dueAt,
+        # Strip timezone info before storing — column is TIMESTAMP WITHOUT TIME ZONE
+        due_at=payload.dueAt.replace(tzinfo=None) if payload.dueAt else None,
         points_possible=payload.pointsPossible,
         status=payload.status,
         allow_resubmission=payload.allowResubmission,

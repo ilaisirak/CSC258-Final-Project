@@ -1,5 +1,7 @@
 fastapi
 uvicorn
-python-multipart
+sqlalchemy[asyncio]
+asyncpg
+alembic
 minio
-google-cloud-storage
+python-multipart

@@ -33,3 +33,5 @@ export const api: ApiClient = {
   submissions: pick("submissions"),
   grading: pick("grading"),
 };
+
+console.log("API MODE:", import.meta.env.VITE_API_MODE);

@@ -2,6 +2,8 @@
 # Field names use camelCase to match the frontend API contract.
 # Aliases map camelCase fields to the snake_case column names in the ORM model.
 
+from datetime import datetime
+
 from pydantic import BaseModel, computed_field, Field, model_validator
 from typing import Optional, Literal, Any
 from uuid import UUID
@@ -35,7 +37,6 @@ class ClassCreate(BaseModel):
 
 # Shapes the response returned by all class endpoints.
 # Field aliases map ORM snake_case column names to camelCase JSON output.
-# by_alias=True ensures the response serializes using the camelCase names.
 #
 # Because the Class model stores term fields as flat columns (term_season,
 # term_year, etc.), assemble_term reconstructs the nested ClassTerm object
@@ -52,11 +53,7 @@ class ClassResponse(BaseModel):
     studentCount: int    = Field(default=0, alias="student_count")
     assignmentCount: int = Field(default=0, alias="assignment_count")
 
-    model_config = {
-        "from_attributes": True,
-        "populate_by_name": True,
-        "by_alias": True
-    }
+    model_config = {"from_attributes": True, "populate_by_name": True,}
 
     @model_validator(mode="before")
     @classmethod
@@ -81,3 +78,18 @@ class ClassResponse(BaseModel):
                 }
             }
         return data
+    
+# Represents a single enrollment record.
+class EnrollmentResponse(BaseModel):
+    id: UUID
+    classId: UUID      = Field(alias="class_id")
+    studentId: UUID    = Field(alias="student_id")
+    enrolledAt: datetime = Field(alias="enrolled_at")
+
+    model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+# Request body for adding a student to a class by email.
+# The class service calls the user service to resolve the email to a UUID.
+class AddStudentRequest(BaseModel):
+    email: str

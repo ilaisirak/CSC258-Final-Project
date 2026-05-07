@@ -2,6 +2,7 @@
 # All routes are async and use the get_db dependency for database access.
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
@@ -15,13 +16,17 @@ router = APIRouter()
 # which the frontend treats as an unauthenticated state.
 # Note: this is a simplified session mechanism. A production implementation
 # would use JWT tokens instead of a plain user ID header.
-@router.get("/users/me", response_model=UserResponse)
+@router.get("/users/me")
 async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = request.headers.get("X-User-Id")
     if not user_id:
-        return None
+        # Return null explicitly rather than None which causes serialization error
+        return JSONResponse(content=None, status_code=200)
     result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
+    if not user:
+        return JSONResponse(content=None, status_code=200)
+    return user
 
 # Looks up a user by name and role combination.
 # Returns 404 if no matching user is found.

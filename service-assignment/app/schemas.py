@@ -36,4 +36,4 @@ class AssignmentResponse(BaseModel):
     status: AssignmentStatus
     allowResubmission: bool     = Field(alias="allow_resubmission")
 
-    model_config = {"from_attributes": True, "populate_by_name": True, "by_alias": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
