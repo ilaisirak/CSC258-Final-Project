@@ -16,7 +16,7 @@ USER_SERVICE_URL = "http://service-user:8000"
 
 
 # Create a new class (professor).
-@router.post("/classes", response_model=ClassResponse, response_model_by_alias=True)
+@router.post("/classes", response_model=ClassResponse)
 async def create_class(payload: ClassCreate, db: AsyncSession = Depends(get_db)):
     class_ = Class(
         code=payload.code,
@@ -32,20 +32,20 @@ async def create_class(payload: ClassCreate, db: AsyncSession = Depends(get_db))
     db.add(class_)
     await db.commit()
     await db.refresh(class_)
-    return ClassResponse.model_validate(class_).model_dump(by_alias=True)
+    return class_
 
 
-@router.get("/classes/{class_id}", response_model=ClassResponse, response_model_by_alias=True)
+@router.get("/classes/{class_id}", response_model=ClassResponse)
 async def get_class(class_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Class).where(Class.id == class_id))
     class_ = result.scalar_one_or_none()
     if not class_:
         raise HTTPException(status_code=404, detail="Class not found")
-    return ClassResponse.model_validate(class_).model_dump(by_alias=True)
+    return class_
 
 
 # Retrieve all classes, optionally filtered by professor_id.
-@router.get("/classes", response_model=list[ClassResponse], response_model_by_alias=True)
+@router.get("/classes", response_model=list[ClassResponse])
 async def get_classes(
     professorId: str = None,
     studentId: str = None,
@@ -67,16 +67,12 @@ async def get_classes(
         query = query.where(Class.id.in_(class_ids))
     result = await db.execute(query)
     classes = result.scalars().all()
-
-    return [
-        ClassResponse.model_validate(c).model_dump(by_alias=True)
-        for c in classes
-    ]
+    return classes
 
 # Get all students enrolled in a class.
 # Fetches enrollment records then calls the user service to resolve
 # each student_id into a full user object.
-@router.get("/classes/{class_id}/roster", response_model_by_alias=True)
+@router.get("/classes/{class_id}/roster")
 async def get_roster(class_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Enrollment).where(Enrollment.class_id == class_id)
@@ -102,7 +98,7 @@ async def get_roster(class_id: str, db: AsyncSession = Depends(get_db)):
 
     return students
 
-@router.post("/classes/{class_id}/roster/{student_id}", response_model_by_alias=True)
+@router.post("/classes/{class_id}/roster/{student_id}")
 async def add_student(class_id: str, student_id: str, db: AsyncSession = Depends(get_db)):
     # Verify class exists
     class_result = await db.execute(select(Class).where(Class.id == class_id))
@@ -129,7 +125,7 @@ async def add_student(class_id: str, student_id: str, db: AsyncSession = Depends
     return {"message": "Student enrolled", "studentId": student_id, "classId": class_id}
 
 # Remove a student from a class.
-@router.delete("/classes/{class_id}/roster/{user_id}", response_model_by_alias=True)
+@router.delete("/classes/{class_id}/roster/{user_id}")
 async def remove_student(class_id: str, user_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Enrollment).where(

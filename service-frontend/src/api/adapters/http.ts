@@ -24,6 +24,31 @@ import type { ApiClient } from "./interfaces";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
+// ---------- Snake ⇄ camelCase conversion utilities ----------
+
+function snakeToCamelCase(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+function keysToCamelCase(input: unknown): unknown {
+  if (Array.isArray(input)) {
+    return input.map(keysToCamelCase);
+  }
+  if (input !== null && typeof input === "object") {
+    return Object.keys(input as Record<string, unknown>).reduce(
+      (acc, key) => {
+        const camelKey = snakeToCamelCase(key);
+        acc[camelKey] = keysToCamelCase((input as Record<string, unknown>)[key]);
+        return acc;
+      },
+      {} as Record<string, unknown>
+    );
+  }
+  return input;
+}
+
+// ---------- Generic HTTP fetch wrapper ----------
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
@@ -38,12 +63,18 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   }
   // 204 No Content
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  const data = await res.json();
+  return keysToCamelCase(data) as T; // ← all responses now converted
 }
 
 // Parses a term label string ("Spring 2026") into season and year fields
 // that the backend expects. Used by classes.create and classes.update.
-function parseTermLabel(term: any): { season: string; year: number; startsOn: string; endsOn: string } {
+function parseTermLabel(term: any): {
+  season: string;
+  year: number;
+  startsOn: string;
+  endsOn: string;
+} {
   const [seasonRaw, yearRaw] = term?.label?.split(" ") ?? [];
   return {
     season: seasonRaw?.toLowerCase() ?? "spring",
@@ -53,6 +84,8 @@ function parseTermLabel(term: any): { season: string; year: number; startsOn: st
   };
 }
 
+// ---------- API client implementation ----------
+
 export const httpClient: ApiClient = {
   users: {
     // Restores session on page load by reading X-User-Id header.
@@ -61,7 +94,10 @@ export const httpClient: ApiClient = {
 
     // Signs in by name and role — matches backend UserSignIn schema.
     signIn: (role, name) =>
-      http("/users/sign-in", { method: "POST", body: JSON.stringify({ role, name }) }),
+      http("/users/sign-in", {
+        method: "POST",
+        body: JSON.stringify({ role, name }),
+      }),
 
     signOut: () => http("/users/sign-out", { method: "POST" }),
 
@@ -89,7 +125,10 @@ export const httpClient: ApiClient = {
         ...input,
         term: parseTermLabel(input.term),
       };
-      return http("/classes", { method: "POST", body: JSON.stringify(transformed) });
+      return http("/classes", {
+        method: "POST",
+        body: JSON.stringify(transformed),
+      });
     },
 
     // Same term transformation as create — patch may include a term object.
@@ -98,7 +137,10 @@ export const httpClient: ApiClient = {
         ...patch,
         ...(patch.term ? { term: parseTermLabel(patch.term) } : {}),
       };
-      return http(`/classes/${id}`, { method: "PATCH", body: JSON.stringify(transformed) });
+      return http(`/classes/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(transformed),
+      });
     },
 
     roster: (classId) => http(`/classes/${classId}/roster`),
@@ -146,10 +188,16 @@ export const httpClient: ApiClient = {
     get: (id) => http(`/assignments/${id}`),
 
     create: (input) =>
-      http("/assignments", { method: "POST", body: JSON.stringify(input) }),
+      http("/assignments", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
 
     update: (id, patch) =>
-      http(`/assignments/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+      http(`/assignments/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
   },
 
   submissions: {
@@ -164,15 +212,17 @@ export const httpClient: ApiClient = {
     // Sends multipart form data to the submission service.
     // Content-Type is intentionally omitted so fetch sets the
     // multipart boundary automatically from the FormData object.
-    // studentName is omitted — backend defaults to "Unknown" if not provided.
-    submit: async ({ assignmentId, studentId, files }) => {
+    submit: async ({ assignmentId, studentId, studentName, files }) => {
       const fd = new FormData();
       fd.append("assignmentId", assignmentId);
       fd.append("studentId", studentId);
+      fd.append("studentName", studentName); // ← added
       for (const f of files) fd.append("file", f, f.name);
+
       const res = await fetch(`${BASE}/submit`, { method: "POST", body: fd });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()) as Submission;
+      const data = await res.json();
+      return keysToCamelCase(data) as Submission;
     },
   },
 

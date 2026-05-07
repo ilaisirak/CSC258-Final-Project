@@ -37,7 +37,7 @@ export interface SubmissionsAdapter {
   listForAssignment(assignmentId: string): Promise<Submission[]>;
   listForStudent(studentId: string): Promise<Submission[]>;
   get(id: string): Promise<Submission>;
-  submit(input: { assignmentId: string; studentId: string; files: File[] }): Promise<Submission>;
+  submit(input: { assignmentId: string; studentId: string; studentName: string; files: File[] }): Promise<Submission>;
 }
 
 export interface GradingAdapter {
