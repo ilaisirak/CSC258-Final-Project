@@ -1,3 +1,24 @@
+# ConfigMap for PgBouncer sidecar configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-assignment-config
+data:
+  pgbouncer.ini: |
+    [databases]
+    assignments = host=assignment-db port=5432 dbname=assignments user=dev password=devpassword
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    auth_type = md5
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = transaction
+    max_client_conn = 100
+    default_pool_size = 20
+  userlist.txt: |
+    "dev" "devpassword"
+---
 # Deployment responsible for running and scaling service-assignment
 apiVersion: apps/v1
 kind: Deployment
@@ -21,13 +42,35 @@ spec:
         - containerPort: 8000
         env:
         - name: DATABASE_URL
-          value: "postgresql+asyncpg://dev:devpassword@assignment-db:5432/assignments"
+          value: "postgresql+asyncpg://dev:devpassword@localhost:6432/assignments"
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
           initialDelaySeconds: 5
           periodSeconds: 10
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+      - name: pgbouncer
+        image: edoburu/pgbouncer:latest
+        volumeMounts:
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/pgbouncer.ini
+          subPath: pgbouncer.ini
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/userlist.txt
+          subPath: userlist.txt
+        ports:
+        - containerPort: 6432
+      volumes:
+      - name: pgbouncer-config
+        configMap:
+          name: pgbouncer-assignment-config
 ---
 # Service routes traffic to the service-assignment pods
 apiVersion: v1

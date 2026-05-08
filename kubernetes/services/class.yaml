@@ -1,4 +1,23 @@
-# Deployment responsible for running and scaling service-class
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-class-config
+data:
+  pgbouncer.ini: |
+    [databases]
+    classes = host=class-db port=5432 dbname=classes user=dev password=devpassword
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    auth_type = md5
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = transaction
+    max_client_conn = 100
+    default_pool_size = 20
+  userlist.txt: |
+    "dev" "devpassword"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,15 +40,36 @@ spec:
         - containerPort: 8000
         env:
         - name: DATABASE_URL
-          value: "postgresql+asyncpg://dev:devpassword@class-db:5432/classes"
+          value: "postgresql+asyncpg://dev:devpassword@localhost:6432/classes"
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
           initialDelaySeconds: 5
           periodSeconds: 10
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+      - name: pgbouncer
+        image: edoburu/pgbouncer:latest
+        volumeMounts:
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/pgbouncer.ini
+          subPath: pgbouncer.ini
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/userlist.txt
+          subPath: userlist.txt
+        ports:
+        - containerPort: 6432
+      volumes:
+      - name: pgbouncer-config
+        configMap:
+          name: pgbouncer-class-config
 ---
-# Service routes traffic to the service-class pods
 apiVersion: v1
 kind: Service
 metadata:
