@@ -2,40 +2,42 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: service-user   # Name of the deployment
+  name: service-user
 spec:
-  replicas: 2               # Adjust based on load requirements
+  replicas: 2
   selector:
     matchLabels:
-      app: service-user  # Connects deployment to the pods it manages
-
+      app: service-user
   template:
     metadata:
       labels:
-        app: service-user  # Label used for service discovery
+        app: service-user
     spec:
       containers:
       - name: service-user
-        image: service-user:latest  # Docker image to run
-
-        imagePullPolicy: IfNotPresent     # Tells Kubernetes to use local Kind-loaded images
-
+        image: service-user:latest
+        imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8000  # FastAPI's port
-
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql+asyncpg://dev:devpassword@user-db:5432/users"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
 ---
-
 # Service routes traffic to the service-user pods
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-user  # Network name for the service
+  name: service-user
 spec:
   selector:
-    app: service-user  # Routes traffic to pods with this label
-
+    app: service-user
   ports:
-    - port: 80          # Port exposed inside the cluster
-      targetPort: 8000  # Forwards traffic to container port
-
-  type: ClusterIP       # Internal-only access (not exposed to internet)
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP
