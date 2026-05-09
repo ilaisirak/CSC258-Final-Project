@@ -4,3 +4,6 @@
 
 # MinIO system directory
 .minio.sys/
+
+# Locust files generate pycache files, which we don't want to commit
+/test/__pycache__/*
