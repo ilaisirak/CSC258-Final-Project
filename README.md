@@ -1,211 +1,201 @@
-# CSC258 Final Project - Student Grading System
+# Grading Portal — CSC258 Final Project
 
-## Overview
-
-This project implements a microservices-based student grading system using Docker and Kubernetes. The system supports assignment management, submissions, grading, and user/class management.
-
-Key design principles:
-
-* Microservice architecture
-* Database per service
-* API Gateway using Kubernetes Ingress
-* Environment-based configuration
+A microservices-based student grading system with Docker Compose (development) and Kubernetes (production) deployment.
 
 ---
 
-## Architecture
+## For the Professor — What This System Does
 
-### Services
+This application lets professors and students interact with a simple grading portal.
 
-* User Service
-* Assignment Service
-* Submission Service
-* Grading Service
-* Class Service
+**Professors** can create classes, add assignments, and set due dates. They can view student rosters and add students by email (no pre-registration required — the system resolves email to an account), grade submitted work, leave feedback, and see submitted files directly in the browser through presigned storage links.
 
-### Storage
+**Students** can sign up with just a name, email, and role — no password required. They can enroll in classes, submit assignments (with file uploads), and view grades and feedback from a dashboard that groups all assignments by class.
 
-* Relational databases (per service)
-* File storage:
-
-  * MinIO (local development)
-  * Google Cloud Storage (cloud deployment)
+Both roles use a single-page React frontend that communicates with a RESTful API. The entire system is self-contained — run it with one command on a single machine, or scale it to many replicas with Kubernetes.
 
 ---
 
-## Dependencies
+## Architecture Highlights
 
-* Python 3.11
-* FastAPI
-* Docker
-* Kubernetes
-* Kind (Kubernetes in Docker) — for local deployment only
-
-Python libraries:
-
-* fastapi
-* uvicorn
-* minio
-* google-cloud-storage
-* python-multipart
-
----
-
-## Environment Configuration
-
-Environment variables are used to switch between local and cloud setups.
-
-Example .env:
-
-```bash
-# Storage
-STORAGE_TYPE=minio
-MINIO_ENDPOINT=minio:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-GCS_BUCKET=TBD
-
-# Frontend API mode
-VITE_API_MODE=mock
-
-# Per-namespace overrides: mock -> http as each service is confirmed working
-VITE_API_USERS=http
-VITE_API_CLASSES=http
-VITE_API_ASSIGNMENTS=http
-VITE_API_SUBMISSIONS=mock
-VITE_API_GRADING=http
-```
-
-`.env` files are not committed. Each developer creates their own.
+- **Domain-aligned microservices** — each service owns its own PostgreSQL database:
+  - `service-user` — user accounts and search
+  - `service-class` — classes, rosters, enrollments
+  - `service-assignment` — assignments
+  - `service-submission` — file uploads (stored in MinIO)
+  - `service-grading` — grades and feedback
+  - `service-frontend` — React/TypeScript app served by Nginx
+- **Per-service database with persistent storage** via Kubernetes StatefulSets and PVCs
+- **Connection pooling** via PgBouncer sidecars to keep database connections optimal when autoscaling
+- **Horizontal Pod Autoscaler (HPA)** on every backend service — automatically scales pods based on CPU load (70% target)
+- **Presigned file storage** — MinIO generates short-lived URLs so the browser can directly download submitted files
+- **Email-resolved roster** — professors add students by email; the user service resolves it to a UUID before enrolling
 
 ---
 
-## Running Locally
+## Quick Start — Docker Compose (Local Development)
 
-### Docker Compose (recommended for development)
+### Prerequisites
 
-Use this for day-to-day development. Starts all services, databases, and MinIO
-together without needing a Kubernetes cluster.
+- Docker and Docker Compose v2
+- No extra setup — the Compose file starts all services, databases, and MinIO automatically
 
-1. Clone the repository
+### Steps
 
-2. Create environment file (view above section)
-
-3. Start the full stack
+1. Clone the repository.
+2. Create a `.env` file in the project root (see example below).
+3. Start everything:
 
 ```bash
 docker-compose up --build
 ```
 
-4. To start only a specific service and its dependencies
+4. Access the frontend at http://localhost:3000.
 
-```bash
-docker-compose up --build service-assignment postgres-assignments minio
+### Example `.env`
+
+```env
+STORAGE_TYPE=minio
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
 ```
 
-5. Available endpoints once running
+### Useful Commands
 
-| Service            | URL                                                        |
-|--------------------|------------------------------------------------------------|
-| Frontend           | http://localhost:3000                                      |
-| service-assignment | http://localhost:8001/health OR http://localhost:8001/docs |
-| service-class      | http://localhost:8002/health OR http://localhost:8002/docs |
-| service-grading    | http://localhost:8003/health OR http://localhost:8003/docs |
-| service-submission | http://localhost:8004/health OR http://localhost:8004/docs |
-| service-user       | http://localhost:8005/health OR http://localhost:8005/docs |
-| MinIO Console      | http://localhost:9001                                      |
+| Action | Command |
+|---|---|
+| Stop all containers | `docker-compose down` |
+| Wipe all data (volumes) | `docker-compose down -v` |
+| Start only one service | `docker-compose up --build service-assignment postgres-assignments minio` |
 
-6. To stop all running containers
+### Services and Ports
 
-```bash
-docker-compose down
+| Component | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| service-user | http://localhost:8005/health (docs at `/docs`) |
+| service-class | http://localhost:8002/health |
+| service-assignment | http://localhost:8001/health |
+| service-submission | http://localhost:8004/health |
+| service-grading | http://localhost:8003/health |
+| MinIO Console | http://localhost:9001 |
+
+---
+
+## Production-Style Kubernetes Deployment (kind)
+
+We use [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) to run a full cluster locally. A single batch file automates everything.
+
+### Prerequisites
+
+- Docker Desktop
+- `kind` and `kubectl` (install via Chocolatey or direct download)
+- (Optional) `hey` for load testing
+
+### One-Command Deployment
+
+```batch
+deploy_kind.bat
 ```
 
-To stop and wipe all local database and storage volumes (clean slate):
+This script:
+
+1. Checks for `kind`/`kubectl` and creates the kind cluster if missing
+2. Installs the Metrics Server (required for HPA)
+3. Builds all Docker images
+4. Loads them into the kind cluster
+5. Applies all Kubernetes manifests (databases, services, MinIO, Ingress, HPAs)
+6. Waits for all pods to be ready
+7. Asks if you want to port-forward the frontend (and optionally MinIO for file access)
+
+After it finishes, you will have a fully working, autoscaling microservices environment.
+
+### Manual Steps (Optional)
+
+Create a cluster:
 
 ```bash
-docker-compose down -v
+kind create cluster --name csc258-final-project-cluster
+```
+
+Then build, load, and deploy as described in the batch file.
+
+Port-forward the frontend:
+
+```bash
+kubectl port-forward svc/service-frontend 8080:80
+```
+
+### MinIO & File Uploads
+
+File submissions are stored in MinIO. To let the browser download files (e.g. on the grading page), you need to port-forward MinIO as well:
+
+```bash
+kubectl port-forward svc/minio 9000:9000
+```
+
+The batch script offers to open a separate terminal for this automatically.
+
+### Scaling Demonstration
+
+### Stil need to figure this step out
+
+Watch the replicas increase:
+
+```bash
+kubectl get hpa -w
+```
+
+After the load stops, the HPA will scale back down automatically.
+
+### Clean-Up
+
+```bash
+kind delete cluster --name csc258-final-project-cluster
 ```
 
 ---
 
-### kind (Kubernetes in Docker) - Not yet tested
+## Key Changes Since Initial Version
 
-Use this when you want to test your Kubernetes manifests locally before deploying
-to GKE. Requires [kind](https://kind.sigs.k8s.io/) and 
-[kubectl](https://kubernetes.io/docs/tasks/tools/) to be installed.
+- **Kubernetes deployment** with persistent databases (PostgreSQL StatefulSets), PgBouncer sidecar pooling, and Horizontal Pod Autoscaling
+- **Roster additions by email** — frontend resolves email to UUID via `/users/search`, then enrolls via UUID
+- **File download fix** — grading page now renders presigned URLs so professors can open submitted files directly
+- **Deployment batch file** fully automates cluster creation, image building, manifest application, and optional port-forward
+- **Service-specific ConfigMaps** for Nginx (frontend proxy) and PgBouncer (connection pooling)
 
-1. Create a local cluster
+---
 
-```bash
-kind create cluster --name grading-portal
+## Project Structure
+
 ```
-
-2. Load your service images into the cluster (repeat for each service)
-
-```bash
-kind load docker-image service-assignment --name grading-portal
-kind load docker-image service-class --name grading-portal
-kind load docker-image service-grading --name grading-portal
-kind load docker-image service-submission --name grading-portal
-kind load docker-image service-user --name grading-portal
-```
-
-3. Apply your Kubernetes manifests
-
-```bash
-kubectl apply -f kubernetes/
-```
-
-4. To delete the cluster when done
-
-```bash
-kind delete cluster --name grading-portal
+.
+├── kubernetes/               # All K8s manifests
+│   ├── databases/            # StatefulSets, Services, Secrets for each DB
+│   ├── minio/                # MinIO deployment & PVC
+│   ├── services/             # Deployments & Services for all microservices + frontend
+│   └── ingress.yaml
+├── service-assignment/       # FastAPI microservice (similar for user, class, submission, grading)
+├── service-frontend/         # React app with Nginx config
+├── docker-compose.yaml       # Local development stack
+├── deploy_kind.bat           # One-command Kubernetes deployment
+└── README.md
 ```
 
 ---
 
-## Cloud Deployment (GCP) - Not yet tested
-
-The system is designed for deployment on Google Cloud Platform.
-
-Required services:
-
-* Kubernetes Engine (GKE)
-* Google Cloud Storage
-
-Changes for cloud:
-
-* Set `STORAGE_TYPE=gcs`
-* Remove MinIO deployment
-* Provide service account credentials
-
----
-
-## Service Communication
-
-* External requests routed through Ingress
-* Internal communication via REST APIs
-* Service discovery handled by Kubernetes
-
----
-
-## Team Information
-
-### Members and Contributions
+## Team
 
 **Jeremy Auradou**
-
-* Establishing initial code environment (setting up MinIO, kind, FastAPI, file structure, etc.)
-* Set up assignment, class, grading, and user services.
-* Made README
+- Microservice design and backend implementation (all services, database schemas, MinIO integration)
+- Kubernetes architecture — StatefulSets, HPA, PgBouncer sidecars, Metrics Server, deployment script
+- Frontend-backend integration, API adapters, snake/camel case conversion
+- User registration, email-resolved roster, file download fix
+- Documentation and README
 
 **Elliott Harrison**
-
-* Quality control, code review
+- Quality assurance, code review, testing
 
 **Ilai Sirak**
-
-* Frontend
-
----
+- Frontend development (React, routing, components, styling)

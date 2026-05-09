@@ -67,6 +67,10 @@ spec:
           subPath: userlist.txt
         ports:
         - containerPort: 6432
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
       volumes:
       - name: pgbouncer-config
         configMap:

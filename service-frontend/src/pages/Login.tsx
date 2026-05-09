@@ -8,10 +8,12 @@ import type { Role } from "@/api/types";
 import styles from "./Login.module.css";
 
 export function LoginPage() {
-  const { signIn } = useAuth();
+  const { signIn, register } = useAuth();  
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>("student");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState(""); 
+  const [isCreating, setIsCreating] = useState(false); 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,13 +23,22 @@ export function LoginPage() {
       setError("Please enter your name");
       return;
     }
+    if (isCreating && !email.trim()) {
+      setError("Please enter your email");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const u = await signIn(role, name);
+      let u;
+      if (isCreating) {
+        u = await register(name, email, role);
+      } else {
+        u = await signIn(role, name);
+      }
       navigate(u.role === "professor" ? "/professor" : "/student", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-in failed");
+      setError(err instanceof Error ? err.message : (isCreating ? "Registration failed" : "Sign-in failed"));
     } finally {
       setSubmitting(false);
     }
@@ -51,7 +62,9 @@ export function LoginPage() {
           </div>
           <div>
             <h1 className={styles.brandTitle}>Grading Portal</h1>
-            <p className={styles.brandSub}>Sign in to continue</p>
+            <p className={styles.brandSub}>
+              {isCreating ? "Create your account" : "Sign in to continue"}
+            </p>
           </div>
         </div>
 
@@ -81,16 +94,56 @@ export function LoginPage() {
             placeholder={role === "student" ? "Alex Chen" : "Dr. Mira Patel"}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            error={error ?? undefined}
+            error={error && !isCreating ? error : undefined}
             autoFocus
           />
 
+          {/* Show email field only during account creation */}
+          {isCreating && (
+            <Input
+              label="Email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              error={error && isCreating ? error : undefined}
+            />
+          )}
+
           <Button type="submit" size="lg" fullWidth loading={submitting}>
-            Continue
+            {isCreating ? "Create Account" : "Continue"}
           </Button>
 
           <p className={styles.footnote}>
-            Demo mode — pick a role and any name. No password required.
+            {isCreating ? (
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  className={styles.footnoteBtn}
+                  onClick={() => {
+                    setIsCreating(false);
+                    setError(null);
+                  }}
+                >
+                  Sign in
+                </button>
+              </>
+            ) : (
+              <>
+                Don't have an account?{" "}
+                <button
+                  type="button"
+                  className={styles.footnoteBtn}
+                  onClick={() => {
+                    setIsCreating(true);
+                    setError(null);
+                  }}
+                >
+                  Create one
+                </button>
+              </>
+            )}
           </p>
         </form>
       </div>
@@ -98,6 +151,7 @@ export function LoginPage() {
   );
 }
 
+// RoleCard component remains unchanged
 function RoleCard({
   active,
   onClick,

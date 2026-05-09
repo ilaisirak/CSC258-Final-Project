@@ -13,6 +13,8 @@ export interface UsersAdapter {
   signIn(role: Role, name: string): Promise<User>;
   signOut(): Promise<void>;
   list(): Promise<User[]>;
+  createUser(input: { name: string; email: string; role: Role }): Promise<User>;
+  search(params: { email?: string; name?: string }): Promise<User[]>; 
 }
 
 export interface ClassesAdapter {
@@ -21,7 +23,7 @@ export interface ClassesAdapter {
   create(input: Omit<Class, "id" | "studentCount" | "assignmentCount">): Promise<Class>;
   update(id: string, patch: Partial<Class>): Promise<Class>;
   roster(classId: string): Promise<User[]>;
-  addStudent(classId: string, email: string): Promise<User>;
+  addStudent(classId: string, studentId: string): Promise<User>;
   removeStudent(classId: string, userId: string): Promise<void>;
 }
 
