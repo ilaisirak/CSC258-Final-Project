@@ -3,7 +3,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from app.database import get_db
 from app.models import Class, Enrollment
 from app.schemas import ClassCreate, ClassResponse, AddStudentRequest
@@ -32,6 +32,10 @@ async def create_class(payload: ClassCreate, db: AsyncSession = Depends(get_db))
     db.add(class_)
     await db.commit()
     await db.refresh(class_)
+
+    # Newly created class has zero students and zero assignments
+    class_.student_count = 0
+    class_.assignment_count = 0
     return class_
 
 
@@ -41,6 +45,14 @@ async def get_class(class_id: str, db: AsyncSession = Depends(get_db)):
     class_ = result.scalar_one_or_none()
     if not class_:
         raise HTTPException(status_code=404, detail="Class not found")
+
+    # Compute actual student count from enrollments
+    cnt_q = select(func.count(Enrollment.id)).where(Enrollment.class_id == class_id)
+    student_count = (await db.execute(cnt_q)).scalar() or 0
+
+    # Attach count as a temporary attribute (not stored in DB)
+    class_.student_count = student_count
+    class_.assignment_count = 0   # can be replaced later if assignment count becomes dynamic
     return class_
 
 
@@ -67,7 +79,16 @@ async def get_classes(
         query = query.where(Class.id.in_(class_ids))
     result = await db.execute(query)
     classes = result.scalars().all()
+
+    # Attach student count to each class object before returning
+    for cls in classes:
+        cnt_q = select(func.count(Enrollment.id)).where(Enrollment.class_id == cls.id)
+        student_count = (await db.execute(cnt_q)).scalar() or 0
+        cls.student_count = student_count
+        cls.assignment_count = 0
+
     return classes
+
 
 # Get all students enrolled in a class.
 # Fetches enrollment records then calls the user service to resolve
@@ -98,6 +119,7 @@ async def get_roster(class_id: str, db: AsyncSession = Depends(get_db)):
 
     return students
 
+
 @router.post("/classes/{class_id}/roster/{student_id}")
 async def add_student(class_id: str, student_id: str, db: AsyncSession = Depends(get_db)):
     # Verify class exists
@@ -123,6 +145,7 @@ async def add_student(class_id: str, student_id: str, db: AsyncSession = Depends
     await db.commit()
 
     return {"message": "Student enrolled", "studentId": student_id, "classId": class_id}
+
 
 # Remove a student from a class.
 @router.delete("/classes/{class_id}/roster/{user_id}")

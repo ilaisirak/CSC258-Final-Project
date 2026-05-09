@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout";
-import { Button, Card, Input, Textarea, useToast } from "@/components/ui";
+import { Button, Card, Textarea, useToast } from "@/components/ui";
 import { useAuth } from "@/app/AuthContext";
 import { api } from "@/api/client";
 import { useMutation } from "@/api/hooks";
@@ -53,13 +53,7 @@ export function ProfessorClassNewPage() {
     <PageContainer>
       <Link
         to="/professor/classes"
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          fontSize: "var(--fs-sm)",
-          color: "var(--c-text-muted)",
-        }}
+        style={backLinkStyle}
       >
         <ArrowLeft size={14} /> All classes
       </Link>
@@ -71,43 +65,57 @@ export function ProfessorClassNewPage() {
       />
 
       <Card padding="lg">
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 2fr",
-              gap: "var(--space-4)",
-            }}
-          >
-            <Input
-              label="Code"
-              placeholder="CSC258"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-            <Input
-              label="Name"
-              placeholder="Software Engineering"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "var(--space-4)" }}>
+            <div>
+              <label htmlFor="code" style={labelStyle}>Code</label>
+              <input
+                id="code"
+                name="code"
+                type="text"
+                placeholder="CSC258"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                style={inputStyle}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label htmlFor="name" style={labelStyle}>Name</label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                placeholder="Software Engineering"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="term" style={labelStyle}>Term</label>
+            <input
+              id="term"
+              name="term"
+              type="text"
+              placeholder="Spring 2026"
+              value={termLabel}
+              onChange={(e) => setTermLabel(e.target.value)}
+              style={inputStyle}
             />
           </div>
-          <Input
-            label="Term"
-            placeholder="Spring 2026"
-            value={termLabel}
-            onChange={(e) => setTermLabel(e.target.value)}
-          />
-          <Textarea
-            label="Description"
-            placeholder="Brief overview shown to students."
-            rows={5}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <div>
+            <label htmlFor="description" style={labelStyle}>Description</label>
+            <Textarea
+              id="description"
+              name="description"
+              rows={5}
+              placeholder="Brief overview shown to students."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
           <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
             <Link to="/professor/classes">
               <Button variant="ghost" type="button">
@@ -130,3 +138,28 @@ function currentTermLabel() {
   const term = m < 5 ? "Spring" : m < 8 ? "Summer" : "Fall";
   return `${term} ${d.getFullYear()}`;
 }
+
+const backLinkStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: "var(--fs-sm)",
+  color: "var(--c-text-muted)",
+};
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "var(--fs-sm)",
+  fontWeight: 500,
+  marginBottom: 6,
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "8px 12px",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--c-border)",
+  background: "var(--c-surface)",
+  fontSize: "var(--fs-base)",
+  boxSizing: "border-box",
+};

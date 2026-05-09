@@ -3,7 +3,6 @@
 # Aliases map camelCase fields to the snake_case column names in the ORM model.
 
 from datetime import datetime
-
 from pydantic import BaseModel, computed_field, Field, model_validator
 from typing import Optional, Literal, Any
 from uuid import UUID
@@ -35,6 +34,8 @@ class ClassCreate(BaseModel):
     professorName: str
     term: ClassTerm
 
+    model_config = {"from_attributes": True, "populate_by_name": True}
+
 # Shapes the response returned by all class endpoints.
 # Field aliases map ORM snake_case column names to camelCase JSON output.
 #
@@ -42,24 +43,30 @@ class ClassCreate(BaseModel):
 # term_year, etc.), assemble_term reconstructs the nested ClassTerm object
 # before Pydantic validates the response. This runs automatically whenever
 # a Class ORM object is passed as a response.
+#
+# studentCount and assignmentCount are included with default 0; actual
+# values will be attached to the ORM object before returning so that
+# Pydantic can read them during serialisation.
 class ClassResponse(BaseModel):
     id: UUID
     code: str
     name: str
-    description: Optional[str]
-    professorId: UUID    = Field(alias="professor_id")
-    professorName: str   = Field(alias="professor_name")
+    description: Optional[str] = None
+    professorId: UUID = Field(alias="professor_id")
+    professorName: str = Field(alias="professor_name")
     term: ClassTerm
-    studentCount: int    = Field(default=0, alias="student_count")
-    assignmentCount: int = Field(default=0, alias="assignment_count")
+    studentCount: int = 0
+    assignmentCount: int = 0
 
-    model_config = {"from_attributes": True, "populate_by_name": True,}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
     @model_validator(mode="before")
     @classmethod
     def assemble_term(cls, data: Any) -> Any:
         # When receiving an ORM object, convert it to a dict and
         # reconstruct the nested term object from flat column values.
+        # Also read student_count and assignment_count if they were
+        # temporarily set on the ORM object.
         if hasattr(data, "__dict__"):
             return {
                 "id": data.id,
@@ -68,8 +75,8 @@ class ClassResponse(BaseModel):
                 "description": data.description,
                 "professor_id": data.professor_id,
                 "professor_name": data.professor_name,
-                "student_count": 0,
-                "assignment_count": 0,
+                "student_count": getattr(data, "student_count", 0),
+                "assignment_count": getattr(data, "assignment_count", 0),
                 "term": {
                     "season": data.term_season,
                     "year": data.term_year,
@@ -78,7 +85,7 @@ class ClassResponse(BaseModel):
                 }
             }
         return data
-    
+
 # Represents a single enrollment record.
 class EnrollmentResponse(BaseModel):
     id: UUID
@@ -87,7 +94,6 @@ class EnrollmentResponse(BaseModel):
     enrolledAt: datetime = Field(alias="enrolled_at")
 
     model_config = {"from_attributes": True, "populate_by_name": True}
-
 
 # Request body for adding a student to a class by email.
 # The class service calls the user service to resolve the email to a UUID.

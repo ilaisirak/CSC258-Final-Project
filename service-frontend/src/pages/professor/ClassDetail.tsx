@@ -9,8 +9,6 @@ import {
   Card,
   EmptyState,
   Input,
-  Modal,
-  Select,
   Skeleton,
   Tabs,
   Textarea,
@@ -84,16 +82,13 @@ export function ProfessorClassDetailPage() {
 
   // This mutation now accepts an email, searches for the user, then enrolls via UUID
   const addStudent = useMutation(async (email: string) => {
-    // 1. Search for the user by email
     const users = await api.users.search({ email });
     if (users.length === 0) {
       throw new Error("No user found with that email. Create an account first.");
     }
-    const student = users[0]; // take the first match
-
-    // 2. Enroll using the student's UUID
+    const student = users[0];
     await api.classes.addStudent(classId, student.id);
-    return student; // optional, just for consistency
+    return student;
   });
 
   const removeStudent = useMutation(async (uid: string) => api.classes.removeStudent(classId, uid));
@@ -287,93 +282,141 @@ export function ProfessorClassDetailPage() {
         </div>
       )}
 
-      <Modal
-        open={newOpen}
-        onClose={() => setNewOpen(false)}
-        title="New assignment"
-        description="Students in this class will see it once status is open."
-        footer={
-          <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
-            <Button variant="ghost" onClick={() => setNewOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateAssign} loading={createAssign.loading}>
-              Create
-            </Button>
-          </div>
-        }
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-          <Input
-            label="Title"
-            placeholder="Project 1: Kernel Internals"
-            value={aTitle}
-            onChange={(e) => setATitle(e.target.value)}
+      {/* ===== CUSTOM MODAL FOR NEW ASSIGNMENT ===== */}
+      {newOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(20, 14, 8, 0.45)",
+              zIndex: 1000,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "var(--space-4)",
+              animation: "fade var(--dur-base) ease-out",
+            }}
+            onClick={() => setNewOpen(false)}
           />
-          <Textarea
-            label="Description"
-            rows={4}
-            value={aDesc}
-            onChange={(e) => setADesc(e.target.value)}
-          />
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "var(--space-3)" }}>
-            <Input
-              label="Due"
-              type="datetime-local"
-              value={aDue}
-              onChange={(e) => setADue(e.target.value)}
-            />
-            <Input
-              label="Points"
-              type="number"
-              min={1}
-              value={aPoints}
-              onChange={(e) => setAPoints(Number(e.target.value))}
-            />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "var(--fs-sm)",
-                  fontWeight: 500,
-                  marginBottom: 6,
-                }}
-              >
-                Status
-              </label>
-              <Select
-                value={aStatus}
-                onChange={(e) => setAStatus(e.target.value as AssignmentStatus)}
-              >
-                <option value="draft">Draft</option>
-                <option value="open">Open</option>
-                <option value="closed">Closed</option>
-              </Select>
+          {/* Dialog */}
+          <div
+            style={{
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "100%",
+              maxWidth: 560,
+              maxHeight: "calc(100vh - 2 * var(--space-8))",
+              background: "var(--c-surface)",
+              borderRadius: "var(--radius-lg)",
+              boxShadow: "var(--shadow-lg)",
+              border: "1px solid var(--c-border)",
+              zIndex: 1001,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              animation: "pop var(--dur-base) ease-out",
+            }}
+          >
+            <div style={{ padding: "var(--space-5)", borderBottom: "1px solid var(--c-border)" }}>
+              <h3 style={{ fontSize: "var(--fs-xl)", marginBottom: "var(--space-1)" }}>
+                New assignment
+              </h3>
+              <p style={{ color: "var(--c-text-muted)", fontSize: "var(--fs-sm)" }}>
+                Students in this class will see it once status is open.
+              </p>
             </div>
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "var(--fs-sm)",
-                  fontWeight: 500,
-                  marginBottom: 6,
-                }}
-              >
-                Resubmissions
-              </label>
-              <Select value={aResub ? "yes" : "no"} onChange={(e) => setAResub(e.target.value === "yes")}>
-                <option value="yes">Allowed</option>
-                <option value="no">Not allowed</option>
-              </Select>
+            <div style={{ padding: "var(--space-5)", overflowY: "auto", flex: 1 }}>
+              {/* --- Form fields (identical to before, using native inputs) --- */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                <div>
+                  <label htmlFor="aTitle" style={labelStyle}>Title</label>
+                  <input
+                    id="aTitle"
+                    name="aTitle"
+                    type="text"
+                    placeholder="Project 1: Kernel Internals"
+                    value={aTitle}
+                    onChange={(e) => setATitle(e.target.value)}
+                    style={inputStyle}
+                    autoFocus
+                  />
+                </div>
+                <Textarea
+                  label="Description"
+                  rows={4}
+                  value={aDesc}
+                  onChange={(e) => setADesc(e.target.value)}
+                />
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "var(--space-3)" }}>
+                  <div>
+                    <label htmlFor="aDue" style={labelStyle}>Due</label>
+                    <input
+                      id="aDue"
+                      name="aDue"
+                      type="datetime-local"
+                      value={aDue}
+                      onChange={(e) => setADue(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="aPoints" style={labelStyle}>Points</label>
+                    <input
+                      id="aPoints"
+                      name="aPoints"
+                      type="number"
+                      min={1}
+                      value={aPoints}
+                      onChange={(e) => setAPoints(Number(e.target.value))}
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+                  <div>
+                    <label htmlFor="aStatus" style={labelStyle}>Status</label>
+                    <select
+                      id="aStatus"
+                      name="aStatus"
+                      value={aStatus}
+                      onChange={(e) => setAStatus(e.target.value as AssignmentStatus)}
+                      style={inputStyle}
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="open">Open</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="aResub" style={labelStyle}>Resubmissions</label>
+                    <select
+                      id="aResub"
+                      name="aResub"
+                      value={aResub ? "yes" : "no"}
+                      onChange={(e) => setAResub(e.target.value === "yes")}
+                      style={inputStyle}
+                    >
+                      <option value="yes">Allowed</option>
+                      <option value="no">Not allowed</option>
+                    </select>
+                  </div>
+                </div>
+                <p style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-subtle)" }}>
+                  Created {formatDateTime(new Date().toISOString())}
+                </p>
+              </div>
+            </div>
+            <div style={{ padding: "var(--space-4)", borderTop: "1px solid var(--c-border)", display: "flex", justifyContent: "flex-end", gap: "var(--space-2)" }}>
+              <Button variant="ghost" onClick={() => setNewOpen(false)}>Cancel</Button>
+              <Button onClick={handleCreateAssign} loading={createAssign.loading}>Create</Button>
             </div>
           </div>
-          <p style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-subtle)" }}>
-            Created {formatDateTime(new Date().toISOString())}
-          </p>
-        </div>
-      </Modal>
+        </>
+      )}
     </PageContainer>
   );
 }
@@ -384,3 +427,20 @@ function defaultDueAt() {
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "var(--fs-sm)",
+  fontWeight: 500,
+  marginBottom: 6,
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "8px 12px",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--c-border)",
+  background: "var(--c-surface)",
+  fontSize: "var(--fs-base)",
+  boxSizing: "border-box",
+};

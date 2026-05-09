@@ -176,23 +176,15 @@ echo ============================================
 echo.
 
 :: MinIO port‑forward (optional, required for file uploads)
-set /p START_MINIO="Start port-forwarding for MinIO (file uploads) in a new window? (Y/N): "
-if /i "%START_MINIO%"=="Y" (
-    start "MinIO Port-Forward" cmd /c "kubectl port-forward svc/minio 9000:9000"
-    echo MinIO port-forward launched in a separate window.
-)
+echo "Starting port-forwarding for MinIO (file uploads) in a new window..."
+start "MinIO Port-Forward" cmd /c "kubectl port-forward svc/minio 9000:9000" && echo MinIO Console: http://localhost:9001
+echo MinIO port-forward launched in a separate window.
 
 :: Frontend port‑forward (main entry point)
-set /p START_FRONTEND="Start port-forwarding to http://localhost:8080 now? (Y/N): "
-if /i "%START_FRONTEND%"=="Y" (
-    echo.
-    echo Port-forwarding... Press Ctrl+C to stop.
-    kubectl port-forward svc/service-frontend 8080:80
-) else (
-    echo.
-    echo When ready, run:
-    echo   kubectl port-forward svc/service-frontend 8080:80
-    echo and open http://localhost:8080.
-)
+echo "Starting port-forwarding to http://localhost:8080 (frontend)..."
+echo.
+echo Port-forwarding... Press Ctrl+C to stop.
+kubectl port-forward svc/service-frontend 8080:80
+
 pause
 exit /b 0

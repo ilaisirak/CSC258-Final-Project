@@ -33,6 +33,22 @@ Both roles use a single-page React frontend that communicates with a RESTful API
 
 ---
 
+## Architecture Diagram
+
+![Architecture Diagram](docs/images/Architecture_Diagram.png)
+
+---
+
+## Application Screenshots
+
+**Professor View**
+![Professor View](docs/images/Professor_View.png)
+
+**Student View**
+![Student View](docs/images/Student_View.png)
+
+---
+
 ## Quick Start — Docker Compose (Local Development)
 
 ### Prerequisites
@@ -99,6 +115,12 @@ We use [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) to run a full cl
 deploy_kind.bat
 ```
 
+To access SwaggerUI for each service, run:
+
+```batch
+port_forward_backend.bat
+```
+
 This script:
 
 1. Checks for `kind`/`kubectl` and creates the kind cluster if missing
@@ -139,7 +161,12 @@ The batch script offers to open a separate terminal for this automatically.
 
 ### Scaling Demonstration
 
-### Stil need to figure this step out
+```bash
+pip install locust
+python -m locust -f locustfile.py --host=http://localhost:8080
+```
+
+Open Locust web UI at http://localhost:8089 and set load testing parameters
 
 Watch the replicas increase:
 
@@ -147,7 +174,7 @@ Watch the replicas increase:
 kubectl get hpa -w
 ```
 
-After the load stops, the HPA will scale back down automatically.
+After the load stops, the HPA will scale back down automatically (after 5 minutes).
 
 ### Clean-Up
 
@@ -178,8 +205,10 @@ kind delete cluster --name csc258-final-project-cluster
 │   └── ingress.yaml
 ├── service-assignment/       # FastAPI microservice (similar for user, class, submission, grading)
 ├── service-frontend/         # React app with Nginx config
+├── test/                     # Contains all testing script files (locust)
 ├── docker-compose.yaml       # Local development stack
 ├── deploy_kind.bat           # One-command Kubernetes deployment
+├── port_forward_backend.bat  # Opens port forwarding for all services to utilize Swagger UI in testing.
 └── README.md
 ```
 
@@ -190,12 +219,12 @@ kind delete cluster --name csc258-final-project-cluster
 **Jeremy Auradou**
 - Microservice design and backend implementation (all services, database schemas, MinIO integration)
 - Kubernetes architecture — StatefulSets, HPA, PgBouncer sidecars, Metrics Server, deployment script
-- Frontend-backend integration, API adapters, snake/camel case conversion
+- Frontend-backend integration, API adapters
 - User registration, email-resolved roster, file download fix
 - Documentation and README
 
 **Elliott Harrison**
-- Quality assurance, code review, testing
+- Quality assurance, code review
 
 **Ilai Sirak**
 - Frontend development (React, routing, components, styling)
