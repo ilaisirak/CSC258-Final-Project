@@ -56,6 +56,22 @@ async def list_users(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User))
     return result.scalars().all()
 
+# Search users by email or name – used by the frontend to resolve
+# a student’s UUID before enrolling them in a class.
+@router.get("/users/search", response_model=list[UserResponse])
+async def search_users(
+    email: str = None,
+    name: str = None,
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(User)
+    if email:
+        query = query.where(User.email == email)
+    elif name:
+        query = query.where(User.name.ilike(f"%{name}%"))
+    result = await db.execute(query)
+    return result.scalars().all()
+
 # Retrieve a single user by their UUID.
 # Called by other services that need to resolve a user ID to a name or role.
 # Returns 404 if no user with the given ID exists.

@@ -1,41 +1,93 @@
-# Deployment responsible for running and scaling service-submission
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-submission-config
+data:
+  pgbouncer.ini: |
+    [databases]
+    submissions = host=submission-db port=5432 dbname=submissions user=dev password=devpassword
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    auth_type = md5
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = transaction
+    max_client_conn = 100
+    default_pool_size = 20
+  userlist.txt: |
+    "dev" "devpassword"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: service-submission   # Name of the deployment
+  name: service-submission
 spec:
-  replicas: 2               # Adjust based on load requirements
+  replicas: 2
   selector:
     matchLabels:
-      app: service-submission  # Connects deployment to the pods it manages
-
+      app: service-submission
   template:
     metadata:
       labels:
-        app: service-submission  # Label used for service discovery
+        app: service-submission
     spec:
       containers:
       - name: service-submission
-        image: service-submission:latest  # Docker image to run
-
-        imagePullPolicy: IfNotPresent     # Tells Kubernetes to use local Kind-loaded images
-
+        image: service-submission:latest
+        imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8000  # FastAPI's port
-
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql+asyncpg://dev:devpassword@localhost:6432/submissions"
+        - name: MINIO_ENDPOINT
+          value: "minio:9000"
+        - name: MINIO_ACCESS_KEY
+          value: "minioadmin"
+        - name: MINIO_SECRET_KEY
+          value: "minioadmin"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+      - name: pgbouncer
+        image: edoburu/pgbouncer:latest
+        volumeMounts:
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/pgbouncer.ini
+          subPath: pgbouncer.ini
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/userlist.txt
+          subPath: userlist.txt
+        ports:
+        - containerPort: 6432
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+      volumes:
+      - name: pgbouncer-config
+        configMap:
+          name: pgbouncer-submission-config
 ---
-
-# Service routes traffic to the service-submission pods
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-submission  # Network name for the service
+  name: service-submission
 spec:
   selector:
-    app: service-submission  # Routes traffic to pods with this label
-
+    app: service-submission
   ports:
-    - port: 80          # Port exposed inside the cluster
-      targetPort: 8000  # Forwards traffic to container port
-
-  type: ClusterIP       # Internal-only access (not exposed to internet)
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP

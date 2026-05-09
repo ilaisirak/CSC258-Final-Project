@@ -5,5 +5,5 @@ import os
 # postgresql+asyncpg://<username>:<password>@<host>:<port>/<database>
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://dev:devpassword@postgres-assignments:5432/assignments"
+    "postgresql+asyncpg://dev:devpassword@postgres-user:5432/user"
 )

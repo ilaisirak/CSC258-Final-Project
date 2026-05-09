@@ -79,9 +79,23 @@ export function ProfessorClassDetailPage() {
     }
   };
 
-  // Roster add
+  // Roster add – updated: resolve email to UUID first
   const [emailInput, setEmailInput] = useState("");
-  const addStudent = useMutation(async (email: string) => api.classes.addStudent(classId, email));
+
+  // This mutation now accepts an email, searches for the user, then enrolls via UUID
+  const addStudent = useMutation(async (email: string) => {
+    // 1. Search for the user by email
+    const users = await api.users.search({ email });
+    if (users.length === 0) {
+      throw new Error("No user found with that email. Create an account first.");
+    }
+    const student = users[0]; // take the first match
+
+    // 2. Enroll using the student's UUID
+    await api.classes.addStudent(classId, student.id);
+    return student; // optional, just for consistency
+  });
+
   const removeStudent = useMutation(async (uid: string) => api.classes.removeStudent(classId, uid));
 
   const sortedAssigns = useMemo(
@@ -367,7 +381,6 @@ export function ProfessorClassDetailPage() {
 function defaultDueAt() {
   const d = new Date(Date.now() + 7 * 86_400_000);
   d.setHours(23, 59, 0, 0);
-  // toISOString is UTC; for datetime-local input we need local YYYY-MM-DDTHH:MM
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

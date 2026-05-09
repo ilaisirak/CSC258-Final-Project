@@ -102,6 +102,20 @@ export const httpClient: ApiClient = {
     signOut: () => http("/users/sign-out", { method: "POST" }),
 
     list: () => http("/users"),
+
+    createUser: (input) =>
+      http("/users", {
+        method: "POST",
+        body: JSON.stringify(input), 
+      }),
+
+    search: (params) => {
+      const q = new URLSearchParams();
+      if (params.email) q.set("email", params.email);
+      if (params.name) q.set("name", params.name);
+      const qs = q.toString();
+      return http(`/users/search${qs ? `?${qs}` : ""}`);
+    },
   },
 
   classes: {

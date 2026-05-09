@@ -16,6 +16,7 @@ interface AuthContextValue {
   role: Role | null;
   signIn: (role: Role, name: string) => Promise<User>;
   signOut: () => Promise<void>;
+  register: (name: string, email: string, role: Role) => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -39,6 +40,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const register = useCallback<AuthContextValue["register"]>(
+    async (name, email, role) => {
+      await api.users.createUser({ name, email, role });
+      const signedInUser = await api.users.signIn(role, name);
+      setUser(signedInUser);
+      return signedInUser;
+    },
+    []
+  );
+
   const signIn = useCallback<AuthContextValue["signIn"]>(async (role, name) => {
     const u = await api.users.signIn(role, name);
     setUser(u);
@@ -51,8 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, role: user?.role ?? null, signIn, signOut }),
-    [user, loading, signIn, signOut],
+    () => ({ user, loading, role: user?.role ?? null, signIn, signOut, register }),
+    [user, loading, signIn, signOut, register],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

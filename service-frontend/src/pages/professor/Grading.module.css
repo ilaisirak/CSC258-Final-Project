@@ -205,3 +205,13 @@
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+.fileLink {
+  color: var(--c-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.fileLink:hover {
+  text-decoration: underline;
+}

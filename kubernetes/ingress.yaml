@@ -2,14 +2,16 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: api-gateway
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"   # allow larger file uploads
 spec:
   rules:
   - http:
       paths:
-      - path: /submit
+      - path: /
         pathType: Prefix
         backend:
           service:
-            name: submission-service
+            name: service-frontend
             port:
               number: 80

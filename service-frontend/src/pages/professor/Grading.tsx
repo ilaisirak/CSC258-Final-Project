@@ -223,7 +223,18 @@ export function ProfessorGradingPage() {
                     {active.files.map((f) => (
                       <li key={f.id} className={styles.fileItem}>
                         <FileText size={16} className={styles.fileIcon} />
-                        <span className={styles.fileName}>{f.name}</span>
+                        {f.url ? (
+                          <a
+                            href={f.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={styles.fileLink}
+                          >
+                            {f.name}
+                          </a>
+                        ) : (
+                          <span className={styles.fileName}>{f.name}</span>
+                        )}
                         <span className={styles.fileSize}>{formatBytes(f.sizeBytes)}</span>
                       </li>
                     ))}

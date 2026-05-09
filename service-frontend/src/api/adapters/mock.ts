@@ -71,7 +71,6 @@ const usersAdapter: UsersAdapter = {
         role,
       };
       store.users.push(user);
-      // Auto-enroll new students into the demo class so the dashboard isn't empty.
       if (role === "student") {
         store.enrollments.push({
           classId: "c-1",
@@ -93,7 +92,41 @@ const usersAdapter: UsersAdapter = {
     await delay();
     return [...store.users];
   },
-};
+  async createUser(input) {
+    await delay();
+    const existing = store.users.find(
+      (u) => u.email.toLowerCase() === input.email.toLowerCase(),
+    );
+    if (existing) {
+      throw new Error("A user with that email already exists");
+    }
+    const newUser = {
+      id: id("u"),
+      name: input.name,
+      email: input.email,
+      role: input.role,
+    };
+    store.users.push(newUser);
+    if (newUser.role === "student") {
+      store.enrollments.push({
+        classId: "c-1",
+        userId: newUser.id,
+        enrolledAt: new Date().toISOString(),
+      });
+    }
+    return newUser;
+  },
+  async search(params: { email?: string; name?: string }) {
+    await delay(100);
+    let result = [...store.users];
+    if (params.email) {
+      result = result.filter((u) => u.email.toLowerCase() === params.email!.toLowerCase());
+    } else if (params.name) {
+      result = result.filter((u) => u.name.toLowerCase().includes(params.name!.toLowerCase()));
+    }
+    return result;
+  },
+  };
 
 const classesAdapter: ClassesAdapter = {
   async list(opts) {
@@ -234,7 +267,7 @@ const submissionsAdapter: SubmissionsAdapter = {
     if (!s) throw new Error("Submission not found");
     return s;
   },
-  async submit({ assignmentId, studentId, files }) {
+  async submit({ assignmentId, studentId, studentName, files }) {
     await delay(600);
     const student = store.users.find((u) => u.id === studentId);
     const fileRefs: FileRef[] = files.map((f) => ({
@@ -247,7 +280,7 @@ const submissionsAdapter: SubmissionsAdapter = {
       id: id("s"),
       assignmentId,
       studentId,
-      studentName: student?.name ?? "Unknown",
+      studentName: studentName ?? student?.name ?? "Unknown",
       submittedAt: new Date().toISOString(),
       status: "submitted",
       files: fileRefs,
