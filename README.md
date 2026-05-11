@@ -273,3 +273,6 @@ kind delete cluster --name csc258-final-project-cluster
 
 **Ilai Sirak**
 - Frontend development (React, routing, components, styling)
+- Frontend-backend integration, API adapters
+- Additional Microservices
+- 

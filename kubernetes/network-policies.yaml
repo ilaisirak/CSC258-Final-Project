@@ -30,7 +30,8 @@ spec:
     - Ingress
 ---
 # ─────────────────────────────────────────────────────────────────────
-# Frontend: served by nginx; only the ingress controller talks to it.
+# Frontend: served by nginx; the ingress controller and the gateway
+# (which reverse-proxies / to service-frontend) both need access.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -47,6 +48,9 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app: service-gateway
       ports:
         - port: 80
 ---
@@ -296,3 +300,174 @@ spec:
               app: service-submission
       ports:
         - port: 8000
+---
+# ─────────────────────────────────────────────────────────────────────
+# Databases: each DB only accepts connections from its own service pod
+# (via PgBouncer sidecar) on port 5432.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-user-db
+spec:
+  podSelector:
+    matchLabels:
+      app: user-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-user
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-auth-db
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-auth
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-assignment-db
+spec:
+  podSelector:
+    matchLabels:
+      app: assignment-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-assignment
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-class-db
+spec:
+  podSelector:
+    matchLabels:
+      app: class-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-class
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-enrollment-db
+spec:
+  podSelector:
+    matchLabels:
+      app: enrollment-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-enrollment
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-file-storage-db
+spec:
+  podSelector:
+    matchLabels:
+      app: file-storage-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-file-storage
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-grading-db
+spec:
+  podSelector:
+    matchLabels:
+      app: grading-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-grade-records
+      ports:
+        - port: 5432
+---
+# ─────────────────────────────────────────────────────────────────────
+# MinIO: file-storage (bucket bootstrap + presigned URLs) and
+# submission (object upload) both need to reach MinIO on port 9000.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-minio
+spec:
+  podSelector:
+    matchLabels:
+      app: minio
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-file-storage
+        - podSelector:
+            matchLabels:
+              app: service-submission
+      ports:
+        - port: 9000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-submission-db
+spec:
+  podSelector:
+    matchLabels:
+      app: submission-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-submission
+      ports:
+        - port: 5432
