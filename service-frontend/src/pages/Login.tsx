@@ -8,37 +8,47 @@ import type { Role } from "@/api/types";
 import styles from "./Login.module.css";
 
 export function LoginPage() {
-  const { signIn, register } = useAuth();  
+  const { signIn, register } = useAuth();
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>("student");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState(""); 
-  const [isCreating, setIsCreating] = useState(false); 
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setError("Please enter your name");
+    if (!email.trim()) {
+      setError("Please enter your email");
       return;
     }
-    if (isCreating && !email.trim()) {
-      setError("Please enter your email");
+    if (!password) {
+      setError("Please enter your password");
+      return;
+    }
+    if (isCreating && !name.trim()) {
+      setError("Please enter your name");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      let u;
-      if (isCreating) {
-        u = await register(name, email, role);
-      } else {
-        u = await signIn(role, name);
-      }
-      navigate(u.role === "professor" ? "/professor" : "/student", { replace: true });
+      const u = isCreating
+        ? await register({ name, email, password, role })
+        : await signIn(email, password);
+      navigate(u.role === "professor" ? "/professor" : "/student", {
+        replace: true,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : (isCreating ? "Registration failed" : "Sign-in failed"));
+      setError(
+        err instanceof Error
+          ? err.message
+          : isCreating
+            ? "Registration failed"
+            : "Sign-in failed",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -69,49 +79,61 @@ export function LoginPage() {
         </div>
 
         <form className={styles.form} onSubmit={handleSubmit} noValidate>
-          <fieldset className={styles.roleGroup}>
-            <legend className={styles.legend}>I am a…</legend>
-            <div className={styles.roleGrid}>
-              <RoleCard
-                active={role === "student"}
-                onClick={() => setRole("student")}
-                icon={<GraduationCap size={22} />}
-                title="Student"
-                description="View classes, submit assignments, track grades."
-              />
-              <RoleCard
-                active={role === "professor"}
-                onClick={() => setRole("professor")}
-                icon={<BookOpen size={22} />}
-                title="Professor"
-                description="Manage classes, assignments, and grading."
-              />
-            </div>
-          </fieldset>
+          {/* Role selection only matters at registration time. The role is
+              stored on the account itself, so on sign-in the role from
+              the token decides where the user lands. */}
+          {isCreating && (
+            <fieldset className={styles.roleGroup}>
+              <legend className={styles.legend}>I am a…</legend>
+              <div className={styles.roleGrid}>
+                <RoleCard
+                  active={role === "student"}
+                  onClick={() => setRole("student")}
+                  icon={<GraduationCap size={22} />}
+                  title="Student"
+                  description="View classes, submit assignments, track grades."
+                />
+                <RoleCard
+                  active={role === "professor"}
+                  onClick={() => setRole("professor")}
+                  icon={<BookOpen size={22} />}
+                  title="Professor"
+                  description="Manage classes, assignments, and grading."
+                />
+              </div>
+            </fieldset>
+          )}
 
-          <Input
-            label="Your name"
-            placeholder={role === "student" ? "Alex Chen" : "Dr. Mira Patel"}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            error={error && !isCreating ? error : undefined}
-            autoFocus
-          />
-
-          {/* Show email field only during account creation */}
           {isCreating && (
             <Input
-              label="Email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={error && isCreating ? error : undefined}
+              label="Your name"
+              placeholder={role === "student" ? "Alex Chen" : "Dr. Mira Patel"}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
             />
           )}
 
+          <Input
+            label="Email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoFocus={!isCreating}
+          />
+
+          <Input
+            label="Password"
+            type="password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={error ?? undefined}
+          />
+
           <Button type="submit" size="lg" fullWidth loading={submitting}>
-            {isCreating ? "Create Account" : "Continue"}
+            {isCreating ? "Create Account" : "Sign in"}
           </Button>
 
           <p className={styles.footnote}>

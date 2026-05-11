@@ -3,5 +3,4 @@ uvicorn
 sqlalchemy[asyncio]
 asyncpg
 alembic
-minio
-python-multipart
+httpx

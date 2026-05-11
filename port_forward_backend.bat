@@ -6,7 +6,7 @@ echo.
 
 start "service-assignment :8001" cmd /c "kubectl port-forward svc/service-assignment 8001:80"
 start "service-class      :8002" cmd /c "kubectl port-forward svc/service-class 8002:80"
-start "service-grading    :8003" cmd /c "kubectl port-forward svc/service-grading 8003:80"
+start "service-grade-records :8003" cmd /c "kubectl port-forward svc/service-grade-records 8003:80"
 start "service-submission :8004" cmd /c "kubectl port-forward svc/service-submission 8004:80"
 start "service-user       :8005" cmd /c "kubectl port-forward svc/service-user 8005:80"
 

@@ -14,8 +14,6 @@ export default defineConfig({
     port: 5173,
     proxy: {
       // Forwards any /api/* request to the local Ingress (matches local_deploy.bat).
-      // Individual services can be selectively swapped to real HTTP via VITE_API_MODE
-      // and per-namespace overrides; see src/api/adapters/http.ts.
       "/api": {
         target: "http://localhost:8000",
         changeOrigin: true,

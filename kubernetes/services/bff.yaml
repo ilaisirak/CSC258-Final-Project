@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-bff
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service-bff
+  template:
+    metadata:
+      labels:
+        app: service-bff
+    spec:
+      containers:
+      - name: service-bff
+        image: service-bff:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-bff
+spec:
+  selector:
+    app: service-bff
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP

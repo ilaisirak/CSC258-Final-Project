@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-file-storage-config
+data:
+  pgbouncer.ini: |
+    [databases]
+    file_storage = host=file-storage-db port=5432 dbname=file_storage user=dev password=devpassword
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    auth_type = md5
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = transaction
+    max_client_conn = 100
+    default_pool_size = 20
+  userlist.txt: |
+    "dev" "devpassword"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-file-storage
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service-file-storage
+  template:
+    metadata:
+      labels:
+        app: service-file-storage
+    spec:
+      containers:
+      - name: service-file-storage
+        image: service-file-storage:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql+asyncpg://dev:devpassword@localhost:6432/file_storage"
+        - name: MINIO_ENDPOINT
+          value: "minio:9000"
+        - name: MINIO_PUBLIC_ENDPOINT
+          # In kind, MinIO is reached via a port-forward to localhost:9000.
+          # The presigned URLs must point at a host the browser can reach.
+          value: "localhost:9000"
+        - name: MINIO_PUBLIC_SECURE
+          value: "false"
+        - name: MINIO_ACCESS_KEY
+          value: "minioadmin"
+        - name: MINIO_SECRET_KEY
+          value: "minioadmin"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+      - name: pgbouncer
+        image: edoburu/pgbouncer:latest
+        volumeMounts:
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/pgbouncer.ini
+          subPath: pgbouncer.ini
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/userlist.txt
+          subPath: userlist.txt
+        ports:
+        - containerPort: 6432
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+      volumes:
+      - name: pgbouncer-config
+        configMap:
+          name: pgbouncer-file-storage-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-file-storage
+spec:
+  selector:
+    app: service-file-storage
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP

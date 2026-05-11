@@ -3,18 +3,35 @@ import type {
   AssignmentForStudent,
   Class,
   Grade,
+  GradingQueueItem,
+  ProfessorStats,
   Role,
+  StudentStats,
   Submission,
   User,
 } from "../types";
 
+export interface AuthSession {
+  user: User;
+  token: string;
+}
+
 export interface UsersAdapter {
+  /** Returns the currently signed-in user, or null if no valid session. */
   me(): Promise<User | null>;
-  signIn(role: Role, name: string): Promise<User>;
+  /** Authenticate with email + password. Returns the user and JWT. */
+  signIn(email: string, password: string): Promise<AuthSession>;
+  /** Clear the current session. */
   signOut(): Promise<void>;
   list(): Promise<User[]>;
-  createUser(input: { name: string; email: string; role: Role }): Promise<User>;
-  search(params: { email?: string; name?: string }): Promise<User[]>; 
+  /** Register a new account; returns the user and JWT for the new account. */
+  register(input: {
+    name: string;
+    email: string;
+    password: string;
+    role: Role;
+  }): Promise<AuthSession>;
+  search(params: { email?: string; name?: string }): Promise<User[]>;
 }
 
 export interface ClassesAdapter {
@@ -24,6 +41,8 @@ export interface ClassesAdapter {
   update(id: string, patch: Partial<Class>): Promise<Class>;
   roster(classId: string): Promise<User[]>;
   addStudent(classId: string, studentId: string): Promise<User>;
+  /** One-call email enrollment: backend resolves email→UUID and enrolls. */
+  addStudentByEmail(classId: string, email: string): Promise<User>;
   removeStudent(classId: string, userId: string): Promise<void>;
 }
 
@@ -39,7 +58,7 @@ export interface SubmissionsAdapter {
   listForAssignment(assignmentId: string): Promise<Submission[]>;
   listForStudent(studentId: string): Promise<Submission[]>;
   get(id: string): Promise<Submission>;
-  submit(input: { assignmentId: string; studentId: string; studentName: string; files: File[] }): Promise<Submission>;
+  submit(input: { assignmentId: string; studentId: string; files: File[] }): Promise<Submission>;
 }
 
 export interface GradingAdapter {
@@ -48,9 +67,14 @@ export interface GradingAdapter {
     score: number;
     pointsPossible: number;
     feedback?: string;
-    gradedById: string;
   }): Promise<Grade>;
   listForStudent(studentId: string): Promise<Grade[]>;
+  /** Aggregated student dashboard stats. */
+  studentStats(studentId: string): Promise<StudentStats>;
+  /** Aggregated professor dashboard stats. */
+  professorStats(professorId: string): Promise<ProfessorStats>;
+  /** Pre-joined queue of ungraded submissions across the professor's classes. */
+  gradingQueue(professorId: string, limit?: number): Promise<GradingQueueItem[]>;
 }
 
 export interface ApiClient {

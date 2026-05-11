@@ -8,7 +8,6 @@ import { StatCard } from "@/components/domain/StatCard";
 import { useAuth } from "@/app/AuthContext";
 import { api } from "@/api/client";
 import { useQuery } from "@/api/hooks";
-import { gradePercent } from "@/lib/format";
 import layouts from "@/styles/layouts.module.css";
 
 export function ProfessorDashboardPage() {
@@ -16,60 +15,11 @@ export function ProfessorDashboardPage() {
   const profId = user!.id;
 
   const classesQ = useQuery(() => api.classes.list({ professorId: profId }), [profId]);
+  const statsQ = useQuery(() => api.grading.professorStats(profId), [profId]);
+  const queueQ = useQuery(() => api.grading.gradingQueue(profId, 5), [profId]);
 
-  const classIds = (classesQ.data ?? []).map((c) => c.id);
-  // Aggregate assignments + submissions across all professor's classes.
-  const aggQ = useQuery(async () => {
-    const classes = await api.classes.list({ professorId: profId });
-    const all = await Promise.all(
-      classes.map(async (c) => {
-        const assigns = await api.assignments.listForClass(c.id);
-        const subs = await Promise.all(
-          assigns.map((a) => api.submissions.listForAssignment(a.id)),
-        );
-        return { cls: c, assigns, subs: subs.flat() };
-      }),
-    );
-    return all;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profId, classIds.join("|")]);
-
-  const stats = useMemo(() => {
-    if (!aggQ.data) return null;
-    const allSubs = aggQ.data.flatMap((x) => x.subs);
-    const pending = allSubs.filter((s) => !s.grade);
-    const graded = allSubs.filter((s) => s.grade);
-    const avg =
-      graded.length === 0
-        ? null
-        : Math.round(
-            graded.reduce(
-              (acc, s) => acc + gradePercent(s.grade!.score, s.grade!.pointsPossible),
-              0,
-            ) / graded.length,
-          );
-    return {
-      classCount: aggQ.data.length,
-      pending: pending.length,
-      avg,
-      gradedCount: graded.length,
-    };
-  }, [aggQ.data]);
-
-  const queue = useMemo(() => {
-    if (!aggQ.data) return [];
-    const items = aggQ.data.flatMap((x) =>
-      x.subs
-        .filter((s) => !s.grade)
-        .map((s) => {
-          const a = x.assigns.find((y) => y.id === s.assignmentId)!;
-          return { sub: s, assignment: a, cls: x.cls };
-        }),
-    );
-    return items
-      .sort((a, b) => new Date(b.sub.submittedAt).getTime() - new Date(a.sub.submittedAt).getTime())
-      .slice(0, 5);
-  }, [aggQ.data]);
+  const stats = statsQ.data;
+  const queue = useMemo(() => queueQ.data ?? [], [queueQ.data]);
 
   return (
     <PageContainer>
@@ -93,13 +43,17 @@ export function ProfessorDashboardPage() {
         />
         <StatCard
           label="Awaiting grading"
-          value={stats?.pending ?? "—"}
+          value={stats?.pendingCount ?? "—"}
           icon={<ClipboardCheck size={18} />}
-          tone={stats && stats.pending > 0 ? "warning" : "neutral"}
+          tone={stats && stats.pendingCount > 0 ? "warning" : "neutral"}
         />
         <StatCard
           label="Class average"
-          value={stats?.avg === null || stats?.avg === undefined ? "—" : `${stats.avg}%`}
+          value={
+            stats?.avgGrade === null || stats?.avgGrade === undefined
+              ? "—"
+              : `${Math.round(stats.avgGrade)}%`
+          }
           icon={<TrendingUp size={18} />}
           tone="success"
           hint={stats?.gradedCount ? `Across ${stats.gradedCount} graded` : undefined}
@@ -113,7 +67,7 @@ export function ProfessorDashboardPage() {
             Open queue
           </Link>
         </div>
-        {aggQ.loading ? (
+        {queueQ.loading ? (
           <Card padding="md">
             <Skeleton width="60%" />
           </Card>
@@ -125,33 +79,38 @@ export function ProfessorDashboardPage() {
           />
         ) : (
           <div className={layouts.list}>
-            {queue.map(({ sub, assignment, cls }) => (
-              <Card key={sub.id} padding="md" interactive>
-                <Link
-                  to={`/professor/classes/${cls.id}/assignments/${assignment.id}/grade`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    color: "inherit",
-                    gap: "var(--space-3)",
-                  }}
-                >
-                  <div>
-                    <strong>{sub.studentName}</strong>{" "}
-                    <span style={{ color: "var(--c-text-muted)" }}>
-                      submitted {assignment.title}
-                    </span>
-                    <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-subtle)" }}>
-                      {cls.code} · {cls.name}
+            {queue.map((item) => {
+              const sub = item.submission;
+              const assignment = item.assignment;
+              const cls = item.class;
+              return (
+                <Card key={sub.id} padding="md" interactive>
+                  <Link
+                    to={`/professor/classes/${cls.id}/assignments/${assignment.id}/grade`}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      color: "inherit",
+                      gap: "var(--space-3)",
+                    }}
+                  >
+                    <div>
+                      <strong>{sub.studentName}</strong>{" "}
+                      <span style={{ color: "var(--c-text-muted)" }}>
+                        submitted {assignment.title}
+                      </span>
+                      <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-subtle)" }}>
+                        {cls.code} · {cls.name}
+                      </div>
                     </div>
-                  </div>
-                  <Button variant="secondary" size="sm">
-                    Grade
-                  </Button>
-                </Link>
-              </Card>
-            ))}
+                    <Button variant="secondary" size="sm">
+                      Grade
+                    </Button>
+                  </Link>
+                </Card>
+              );
+            })}
           </div>
         )}
       </section>

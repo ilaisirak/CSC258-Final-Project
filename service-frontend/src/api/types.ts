@@ -49,6 +49,10 @@ export interface Assignment {
   status: AssignmentStatus;
   attachments?: FileRef[];
   allowResubmission: boolean;
+  /** computed by the assignment service from status + dueAt */
+  isOpen?: boolean;
+  /** computed by the assignment service: dueAt is in the past */
+  isOverdue?: boolean;
 }
 
 export interface FileRef {
@@ -94,4 +98,26 @@ export interface AssignmentForStudent {
 export interface ApiError {
   message: string;
   code?: string;
+}
+
+/** Returned by GET /students/{id}/stats. */
+export interface StudentStats {
+  avgGrade: number | null;
+  upcomingCount: number;
+  recentGrades: Grade[];
+}
+
+/** Returned by GET /professors/{id}/stats. */
+export interface ProfessorStats {
+  classCount: number;
+  pendingCount: number;
+  gradedCount: number;
+  avgGrade: number | null;
+}
+
+/** One pre-joined entry in the professor's grading queue. */
+export interface GradingQueueItem {
+  submission: Submission;
+  assignment: Assignment;
+  class: Class;
 }

@@ -31,8 +31,9 @@ Other scripts:
 | `npm run lint`     | ESLint over `src/`                        |
 | `npm run format`   | Prettier write                            |
 
-The dev server signs you in by picking a role and a name — no password.
-A demo professor and a few students are seeded.
+The dev server uses real authentication backed by `service-user`
+([`fastapi-users`](https://fastapi-users.github.io/fastapi-users/)). Register an
+account from the login screen — no users are seeded.
 
 ## Project layout
 
@@ -79,15 +80,15 @@ mocked — useful while the backend services come online one by one.
 Configure via `.env.local` (Vite picks up `VITE_*`):
 
 ```bash
-# Default for everything: "mock" or "http"
-VITE_API_MODE=mock
+# Default for everything: "mock" or "http" (default is "http")
+VITE_API_MODE=http
 
 # Optional per-namespace overrides
-VITE_API_USERS=mock
-VITE_API_CLASSES=mock
-VITE_API_ASSIGNMENTS=mock
-VITE_API_SUBMISSIONS=http   # e.g. flip submissions to real backend
-VITE_API_GRADING=mock
+VITE_API_USERS=http
+VITE_API_CLASSES=http
+VITE_API_ASSIGNMENTS=http
+VITE_API_SUBMISSIONS=http
+VITE_API_GRADING=http
 
 # Base URL prefix forwarded by the dev proxy (vite.config.ts)
 VITE_API_BASE=/api
@@ -102,10 +103,15 @@ console: `window.__gpStore`.
 
 ## Auth
 
-Demo-only role picker: choose "student" or "professor" and any name. The
-selection is stored locally and the app routes you to `/student` or
-`/professor`. Wire `VITE_API_USERS=http` and implement the `users` adapter on
-the backend to take over.
+Real email + password authentication via `service-user` (`fastapi-users`
+with HS256 JWT access tokens + opaque refresh tokens). Login posts
+form-urlencoded credentials to `/api/auth/login`, registration to
+`/api/auth/register`. The 15-minute access token is kept in a
+**module-scoped variable** in `adapters/http.ts` (never `localStorage`,
+so XSS cannot read it). The refresh token is delivered as a
+`HttpOnly; SameSite=Lax` cookie scoped to `/api/auth` and rotated on
+every `/auth/refresh`. The http adapter retries any `401` once after
+silently refreshing; if refresh fails the user is redirected to login.
 
 ## Theming
 

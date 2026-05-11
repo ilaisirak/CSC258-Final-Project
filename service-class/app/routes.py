@@ -1,29 +1,51 @@
-# Defines the HTTP endpoints for the class service.
-# Roster endpoints call the user service to resolve student data.
+# HTTP endpoints for the class service.
+#
+# This module is pure CRUD over the class catalog.
+# Roster lives in service-enrollment; student/assignment count
+# enrichment and the studentId filter (which requires a peer call
+# to enrollment) live in service-bff (/views/classes).
+
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func
+
+from app.auth import (
+    CurrentUser,
+    get_current_user,
+    require_role,
+)
 from app.database import get_db
-from app.models import Class, Enrollment
-from app.schemas import ClassCreate, ClassResponse, AddStudentRequest
-import httpx
+from app.models import Class
+from app.schemas import ClassCreate, ClassResponse
 
 router = APIRouter()
 
-# User service URL — resolved via docker-compose service name
-USER_SERVICE_URL = "http://service-user:8000"
+
+def _attach_defaults(class_: Class) -> Class:
+    # ClassResponse declares non-nullable counts; service-class no
+    # longer enriches them, so default to 0 for every row coming out.
+    class_.student_count = 0
+    class_.assignment_count = 0
+    return class_
 
 
-# Create a new class (professor).
 @router.post("/classes", response_model=ClassResponse)
-async def create_class(payload: ClassCreate, db: AsyncSession = Depends(get_db)):
+async def create_class(
+    payload: ClassCreate,
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(require_role("professor")),
+):
+    # Always trust the gateway-verified identity, never the request body,
+    # for the professor binding. Without this the SPA could post any
+    # professorId and have it accepted.
     class_ = Class(
         code=payload.code,
         name=payload.name,
         description=payload.description,
-        professor_id=payload.professorId,
-        professor_name=payload.professorName,
+        professor_id=user.id,
+        professor_name=user.name or "",
         term_season=payload.term.season,
         term_year=payload.term.year,
         term_starts_on=payload.term.startsOn,
@@ -32,139 +54,34 @@ async def create_class(payload: ClassCreate, db: AsyncSession = Depends(get_db))
     db.add(class_)
     await db.commit()
     await db.refresh(class_)
-
-    # Newly created class has zero students and zero assignments
-    class_.student_count = 0
-    class_.assignment_count = 0
-    return class_
+    return _attach_defaults(class_)
 
 
 @router.get("/classes/{class_id}", response_model=ClassResponse)
-async def get_class(class_id: str, db: AsyncSession = Depends(get_db)):
+async def get_class(
+    class_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(get_current_user),
+):
     result = await db.execute(select(Class).where(Class.id == class_id))
     class_ = result.scalar_one_or_none()
     if not class_:
         raise HTTPException(status_code=404, detail="Class not found")
-
-    # Compute actual student count from enrollments
-    cnt_q = select(func.count(Enrollment.id)).where(Enrollment.class_id == class_id)
-    student_count = (await db.execute(cnt_q)).scalar() or 0
-
-    # Attach count as a temporary attribute (not stored in DB)
-    class_.student_count = student_count
-    class_.assignment_count = 0   # can be replaced later if assignment count becomes dynamic
-    return class_
+    return _attach_defaults(class_)
 
 
-# Retrieve all classes, optionally filtered by professor_id.
 @router.get("/classes", response_model=list[ClassResponse])
 async def get_classes(
-    professorId: str = None,
-    studentId: str = None,
-    professor_id: str = None,
-    student_id: str = None,
-    db: AsyncSession = Depends(get_db)
+    professorId: Optional[str] = None,
+    professor_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(get_current_user),
 ):
     resolved_professor = professorId or professor_id
-    resolved_student = studentId or student_id
 
     query = select(Class)
     if resolved_professor:
         query = query.where(Class.professor_id == resolved_professor)
-    if resolved_student:
-        enrollment_result = await db.execute(
-            select(Enrollment.class_id).where(Enrollment.student_id == resolved_student)
-        )
-        class_ids = [row[0] for row in enrollment_result.fetchall()]
-        query = query.where(Class.id.in_(class_ids))
-    result = await db.execute(query)
-    classes = result.scalars().all()
 
-    # Attach student count to each class object before returning
-    for cls in classes:
-        cnt_q = select(func.count(Enrollment.id)).where(Enrollment.class_id == cls.id)
-        student_count = (await db.execute(cnt_q)).scalar() or 0
-        cls.student_count = student_count
-        cls.assignment_count = 0
-
-    return classes
-
-
-# Get all students enrolled in a class.
-# Fetches enrollment records then calls the user service to resolve
-# each student_id into a full user object.
-@router.get("/classes/{class_id}/roster")
-async def get_roster(class_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Enrollment).where(Enrollment.class_id == class_id)
-    )
-    enrollments = result.scalars().all()
-
-    if not enrollments:
-        return []
-
-    # Call user service to resolve each student UUID to a user object
-    students = []
-    async with httpx.AsyncClient() as client:
-        for enrollment in enrollments:
-            try:
-                response = await client.get(
-                    f"{USER_SERVICE_URL}/users/{enrollment.student_id}"
-                )
-                if response.status_code == 200:
-                    students.append(response.json())
-            except httpx.RequestError:
-                # If user service is unavailable, return what we have
-                continue
-
-    return students
-
-
-@router.post("/classes/{class_id}/roster/{student_id}")
-async def add_student(class_id: str, student_id: str, db: AsyncSession = Depends(get_db)):
-    # Verify class exists
-    class_result = await db.execute(select(Class).where(Class.id == class_id))
-    if not class_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Class not found")
-
-    # Check not already enrolled
-    existing = await db.execute(
-        select(Enrollment).where(
-            Enrollment.class_id == class_id,
-            Enrollment.student_id == student_id
-        )
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Student already enrolled")
-
-    enrollment = Enrollment(
-        class_id=class_id,
-        student_id=student_id
-    )
-    db.add(enrollment)
-    await db.commit()
-
-    return {"message": "Student enrolled", "studentId": student_id, "classId": class_id}
-
-
-# Remove a student from a class.
-@router.delete("/classes/{class_id}/roster/{user_id}")
-async def remove_student(class_id: str, user_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Enrollment).where(
-            Enrollment.class_id == class_id,
-            Enrollment.student_id == user_id
-        )
-    )
-    enrollment = result.scalar_one_or_none()
-    if not enrollment:
-        raise HTTPException(status_code=404, detail="Enrollment not found")
-
-    await db.execute(
-        delete(Enrollment).where(
-            Enrollment.class_id == class_id,
-            Enrollment.student_id == user_id
-        )
-    )
-    await db.commit()
-    return {"message": "Student removed"}
+    classes = (await db.execute(query)).scalars().all()
+    return [_attach_defaults(c) for c in classes]

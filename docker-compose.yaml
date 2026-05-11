@@ -1,58 +1,240 @@
 services:
 
-  # ── FRONTEND ──────────────────────────────────────────────
-  frontend:
-    build: ./service-frontend
+  # ── BOOTSTRAP: dev mTLS material ──────────────────────────
+  # One-shot init container that runs scripts/gen-certs.sh against the
+  # shared ./certs mount. The script is idempotent: existing certs are
+  # kept, only missing ones are created. To rotate the CA, wipe the
+  # ./certs directory and re-`docker compose up`.
+  # Every backend service depends on this completing successfully so
+  # that uvicorn never starts before its cert files exist.
+  certs-init:
+    image: alpine:3.20
+    volumes:
+      - ./certs:/certs
+      - ./scripts:/scripts:ro
+    working_dir: /certs
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        apk add --no-cache openssl bash >/dev/null
+        bash -c '
+          set -euo pipefail
+          CERTS="/certs"
+          mkdir -p "$$CERTS"
+          SERVICES="service-user service-auth service-class service-assignment service-grade-records service-submission service-enrollment service-bff service-file-storage service-gateway"
+          if [ ! -f "$$CERTS/ca.crt" ]; then
+            echo "Generating dev CA..."
+            openssl genrsa -out "$$CERTS/ca.key" 4096 2>/dev/null
+            openssl req -x509 -new -nodes -key "$$CERTS/ca.key" -sha256 -days 3650 \
+              -subj "/CN=csc258-dev-ca" -out "$$CERTS/ca.crt"
+          else
+            echo "CA already present; keeping."
+          fi
+          for svc in $$SERVICES; do
+            if [ -f "$$CERTS/$$svc.crt" ]; then
+              echo "  $$svc: existing cert kept"
+              continue
+            fi
+            echo "  $$svc: generating cert"
+            cat > "$$CERTS/$$svc.ext" <<EOF
+        authorityKeyIdentifier=keyid,issuer
+        basicConstraints=CA:FALSE
+        keyUsage = digitalSignature, keyEncipherment
+        extendedKeyUsage = serverAuth, clientAuth
+        subjectAltName = @alt_names
+        [alt_names]
+        DNS.1 = $$svc
+        DNS.2 = localhost
+        EOF
+            openssl genrsa -out "$$CERTS/$$svc.key" 2048 2>/dev/null
+            openssl req -new -key "$$CERTS/$$svc.key" -subj "/CN=$$svc" -out "$$CERTS/$$svc.csr"
+            openssl x509 -req -in "$$CERTS/$$svc.csr" -CA "$$CERTS/ca.crt" -CAkey "$$CERTS/ca.key" \
+              -CAcreateserial -out "$$CERTS/$$svc.crt" -days 825 -sha256 -extfile "$$CERTS/$$svc.ext"
+            rm -f "$$CERTS/$$svc.csr" "$$CERTS/$$svc.ext"
+          done
+          rm -f "$$CERTS/ca.srl"
+          echo "certs-init done."
+        '
+    restart: "no"
+
+  # ── EDGE: GATEWAY + STATIC FRONTEND ──────────────────────
+  # service-gateway is the only container that publishes a host port.
+  # It terminates the public HTTP listener, validates JWTs via
+  # auth_request against service-auth, and proxies API traffic to each
+  # backend over mTLS using service-gateway.{crt,key}. The static SPA
+  # lives in service-frontend (plain HTTP, internal only) and is
+  # reverse-proxied for "/".
+  service-gateway:
+    build: ./service-gateway
     ports:
       - "3000:80"
+    volumes:
+      - ./certs:/etc/svc-certs:ro
     depends_on:
-      - service-assignment
-      - service-class
-      - service-grading
-      - service-submission
-      - service-user
+      certs-init:
+        condition: service_completed_successfully
+      service-frontend:
+        condition: service_started
+      service-assignment:
+        condition: service_started
+      service-auth:
+        condition: service_started
+      service-class:
+        condition: service_started
+      service-enrollment:
+        condition: service_started
+      service-file-storage:
+        condition: service_started
+      service-grade-records:
+        condition: service_started
+      service-submission:
+        condition: service_started
+      service-user:
+        condition: service_started
+
+  service-frontend:
+    build: ./service-frontend
 
   # ── BACKEND SERVICES ──────────────────────────────────────
+  # All backends serve HTTPS only and require a client certificate
+  # signed by ./certs/ca.crt (mTLS). Direct host ports are intentionally
+  # NOT exposed: the only ingress is the gateway. SERVICE_NAME tells
+  # each service which key/cert pair to use for outbound peer calls.
   service-assignment:
     build: ./service-assignment
-    ports:
-      - "8001:8000"
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-assignments:5432/assignments
       STORAGE_TYPE: minio
       MINIO_ENDPOINT: minio:9000
+      SERVICE_NAME: service-assignment
+    volumes:
+      - ./certs:/etc/svc-certs:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --ssl-keyfile /etc/svc-certs/service-assignment.key
+      --ssl-certfile /etc/svc-certs/service-assignment.crt
+      --ssl-ca-certs /etc/svc-certs/ca.crt
+      --ssl-cert-reqs 2
     depends_on:
+      certs-init:
+        condition: service_completed_successfully
       postgres-assignments:
         condition: service_healthy
       minio:
         condition: service_healthy
 
+  # service-auth owns login/refresh/logout/register and /auth/verify.
+  # It calls service-user over mTLS for credential lookups, and persists
+  # only the refresh_tokens table in postgres-auth.
+  service-auth:
+    build: ./service-auth
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-auth:5432/auth
+      SERVICE_NAME: service-auth
+    volumes:
+      - ./certs:/etc/svc-certs:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --ssl-keyfile /etc/svc-certs/service-auth.key
+      --ssl-certfile /etc/svc-certs/service-auth.crt
+      --ssl-ca-certs /etc/svc-certs/ca.crt
+      --ssl-cert-reqs 2
+    depends_on:
+      certs-init:
+        condition: service_completed_successfully
+      postgres-auth:
+        condition: service_healthy
+      service-user:
+        condition: service_started
+
   service-class:
     build: ./service-class
-    ports:
-      - "8002:8000"
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-class:5432/class
       STORAGE_TYPE: minio
       MINIO_ENDPOINT: minio:9000
+      SERVICE_NAME: service-class
+    volumes:
+      - ./certs:/etc/svc-certs:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --ssl-keyfile /etc/svc-certs/service-class.key
+      --ssl-certfile /etc/svc-certs/service-class.crt
+      --ssl-ca-certs /etc/svc-certs/ca.crt
+      --ssl-cert-reqs 2
     depends_on:
+      certs-init:
+        condition: service_completed_successfully
       postgres-class:
         condition: service_healthy
       minio:
         condition: service_healthy
 
-  service-grading:
-    build: ./service-grading
-    ports:
-      - "8003:8000"
+  # service-enrollment owns the enrollments table. service-class is
+  # pure CRUD over the class catalog now; roster reads/writes and
+  # student-count peer queries land here.
+  service-enrollment:
+    build: ./service-enrollment
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-enrollment:5432/enrollment
+      SERVICE_NAME: service-enrollment
+    volumes:
+      - ./certs:/etc/svc-certs:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --ssl-keyfile /etc/svc-certs/service-enrollment.key
+      --ssl-certfile /etc/svc-certs/service-enrollment.crt
+      --ssl-ca-certs /etc/svc-certs/ca.crt
+      --ssl-cert-reqs 2
+    depends_on:
+      certs-init:
+        condition: service_completed_successfully
+      postgres-enrollment:
+        condition: service_healthy
+
+  # service-bff is the composition / view layer. No database. Every
+  # endpoint is a fan-out across peer domain services.
+  service-bff:
+    build: ./service-bff
+    env_file: .env
+    environment:
+      SERVICE_NAME: service-bff
+    volumes:
+      - ./certs:/etc/svc-certs:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --ssl-keyfile /etc/svc-certs/service-bff.key
+      --ssl-certfile /etc/svc-certs/service-bff.crt
+      --ssl-ca-certs /etc/svc-certs/ca.crt
+      --ssl-cert-reqs 2
+    depends_on:
+      certs-init:
+        condition: service_completed_successfully
+
+  service-grade-records:
+    build: ./service-grade-records
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-grading:5432/grading
       STORAGE_TYPE: minio
       MINIO_ENDPOINT: minio:9000
+      SERVICE_NAME: service-grade-records
+    volumes:
+      - ./certs:/etc/svc-certs:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --ssl-keyfile /etc/svc-certs/service-grade-records.key
+      --ssl-certfile /etc/svc-certs/service-grade-records.crt
+      --ssl-ca-certs /etc/svc-certs/ca.crt
+      --ssl-cert-reqs 2
     depends_on:
+      certs-init:
+        condition: service_completed_successfully
       postgres-grading:
         condition: service_healthy
       minio:
@@ -60,29 +242,73 @@ services:
 
   service-submission:
     build: ./service-submission
-    ports:
-      - "8004:8000"
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-submission:5432/submission
-      STORAGE_TYPE: minio
-      MINIO_ENDPOINT: minio:9000
+      SERVICE_NAME: service-submission
+    volumes:
+      - ./certs:/etc/svc-certs:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --ssl-keyfile /etc/svc-certs/service-submission.key
+      --ssl-certfile /etc/svc-certs/service-submission.crt
+      --ssl-ca-certs /etc/svc-certs/ca.crt
+      --ssl-cert-reqs 2
     depends_on:
+      certs-init:
+        condition: service_completed_successfully
       postgres-submission:
+        condition: service_healthy
+      service-file-storage:
+        condition: service_started
+
+  # service-file-storage owns FileRef metadata and brokers MinIO
+  # access. All upload/download URLs are presigned by this service so
+  # that no other backend talks to MinIO directly.
+  service-file-storage:
+    build: ./service-file-storage
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-file-storage:5432/file_storage
+      SERVICE_NAME: service-file-storage
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: localhost:9000
+      MINIO_PUBLIC_SECURE: "false"
+    volumes:
+      - ./certs:/etc/svc-certs:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --ssl-keyfile /etc/svc-certs/service-file-storage.key
+      --ssl-certfile /etc/svc-certs/service-file-storage.crt
+      --ssl-ca-certs /etc/svc-certs/ca.crt
+      --ssl-cert-reqs 2
+    depends_on:
+      certs-init:
+        condition: service_completed_successfully
+      postgres-file-storage:
         condition: service_healthy
       minio:
         condition: service_healthy
 
   service-user:
     build: ./service-user
-    ports:
-      - "8005:8000"
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://dev:devpassword@postgres-user:5432/user
       STORAGE_TYPE: minio
       MINIO_ENDPOINT: minio:9000
+      SERVICE_NAME: service-user
+    volumes:
+      - ./certs:/etc/svc-certs:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --ssl-keyfile /etc/svc-certs/service-user.key
+      --ssl-certfile /etc/svc-certs/service-user.crt
+      --ssl-ca-certs /etc/svc-certs/ca.crt
+      --ssl-cert-reqs 2
     depends_on:
+      certs-init:
+        condition: service_completed_successfully
       postgres-user:
         condition: service_healthy
 
@@ -100,6 +326,19 @@ services:
       interval: 5s
       retries: 5
 
+  postgres-auth:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: auth
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pgdata-auth:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d auth"]
+      interval: 5s
+      retries: 5
+
   postgres-class:
     image: postgres:16
     environment:
@@ -110,6 +349,19 @@ services:
       - pgdata-class:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d class"]
+      interval: 5s
+      retries: 5
+
+  postgres-enrollment:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: enrollment
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pgdata-enrollment:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d enrollment"]
       interval: 5s
       retries: 5
 
@@ -139,6 +391,19 @@ services:
       interval: 5s
       retries: 5
 
+  postgres-file-storage:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: file_storage
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pgdata-file-storage:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d file_storage"]
+      interval: 5s
+      retries: 5
+
   postgres-user:
     image: postgres:16
     environment:
@@ -157,11 +422,14 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"   # S3-compatible API (your services talk to this)
-      - "9001:9001"   # MinIO web console (browser UI)
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      # Allow the SPA (served on http://localhost:3000) to PUT files
+      # directly via presigned URLs. Dev only — narrow in production.
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -169,10 +437,12 @@ services:
       interval: 5s
       retries: 5
 
-# ── VOLUMES ───────────────────────────────────────────────
 volumes:
   pgdata-assignments:
+  pgdata-auth:
   pgdata-class:
+  pgdata-enrollment:
+  pgdata-file-storage:
   pgdata-grading:
   pgdata-submission:
   pgdata-user:

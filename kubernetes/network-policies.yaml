@@ -1,0 +1,298 @@
+# NetworkPolicies — restrict pod-to-pod traffic to the minimum fan-out
+# required by the architecture. Each backend service only accepts
+# ingress from the explicit set of peers that need to reach it. Egress
+# is left default-allow because the gateway and BFF need to reach many
+# peers and pods must reach their PgBouncer + DNS without ceremony.
+#
+# Requires a CNI that enforces NetworkPolicy (e.g. Calico, Cilium). kind's
+# default kindnet does NOT enforce policies; install Calico for testing.
+#
+# Layer summary:
+#   gateway          ← ingress controller (anywhere in-cluster)
+#   bff              ← gateway only
+#   user/class/...   ← gateway, bff, and explicit peer callers
+#   auth             ← gateway, user (auth fetches user records)
+#   file-storage     ← gateway, submission
+#   grade-records    ← gateway, bff
+#
+# Frontend (nginx static) accepts ingress from ingress controller only.
+
+# ─────────────────────────────────────────────────────────────────────
+# Default deny: every pod refuses ingress unless an allow rule below
+# explicitly admits the source. Egress remains default-allow.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# ─────────────────────────────────────────────────────────────────────
+# Frontend: served by nginx; only the ingress controller talks to it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: service-frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - port: 80
+---
+# ─────────────────────────────────────────────────────────────────────
+# Gateway: receives traffic from the ingress controller and from the
+# frontend pod (which proxies /api calls).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app: service-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app: service-frontend
+      ports:
+        - port: 8000
+---
+# ─────────────────────────────────────────────────────────────────────
+# BFF: only the gateway calls into the BFF.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-bff
+spec:
+  podSelector:
+    matchLabels:
+      app: service-bff
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-gateway
+      ports:
+        - port: 8000
+---
+# ─────────────────────────────────────────────────────────────────────
+# Auth: gateway calls /auth/verify on every request; user service does
+# not call auth, but auth calls user — that's egress, not ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-auth
+spec:
+  podSelector:
+    matchLabels:
+      app: service-auth
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-gateway
+      ports:
+        - port: 8000
+---
+# ─────────────────────────────────────────────────────────────────────
+# User: called by gateway (direct CRUD), bff (profile lookups),
+# enrollment (roster expansion), and auth (login/lookup).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-user
+spec:
+  podSelector:
+    matchLabels:
+      app: service-user
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-gateway
+        - podSelector:
+            matchLabels:
+              app: service-bff
+        - podSelector:
+            matchLabels:
+              app: service-enrollment
+        - podSelector:
+            matchLabels:
+              app: service-auth
+      ports:
+        - port: 8000
+---
+# ─────────────────────────────────────────────────────────────────────
+# Class: gateway (CRUD) + bff (view assembly) + enrollment (verifying a
+# class exists before enrolling).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-class
+spec:
+  podSelector:
+    matchLabels:
+      app: service-class
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-gateway
+        - podSelector:
+            matchLabels:
+              app: service-bff
+        - podSelector:
+            matchLabels:
+              app: service-enrollment
+      ports:
+        - port: 8000
+---
+# ─────────────────────────────────────────────────────────────────────
+# Enrollment: gateway (CRUD) + bff (roster lookups for class views).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-enrollment
+spec:
+  podSelector:
+    matchLabels:
+      app: service-enrollment
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-gateway
+        - podSelector:
+            matchLabels:
+              app: service-bff
+      ports:
+        - port: 8000
+---
+# ─────────────────────────────────────────────────────────────────────
+# Assignment: gateway (CRUD) + bff (assignment listings) + submission
+# (isOpen lifecycle check before accepting a submission).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-assignment
+spec:
+  podSelector:
+    matchLabels:
+      app: service-assignment
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-gateway
+        - podSelector:
+            matchLabels:
+              app: service-bff
+        - podSelector:
+            matchLabels:
+              app: service-submission
+      ports:
+        - port: 8000
+---
+# ─────────────────────────────────────────────────────────────────────
+# Submission: gateway (CRUD) + bff (queue assembly) + grade-records (read
+# submission metadata when computing per-class stats).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-submission
+spec:
+  podSelector:
+    matchLabels:
+      app: service-submission
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-gateway
+        - podSelector:
+            matchLabels:
+              app: service-bff
+        - podSelector:
+            matchLabels:
+              app: service-grade-records
+      ports:
+        - port: 8000
+---
+# ───────────────────────────────────────────────────────────────────
+# Grade-records: gateway (CRUD) + bff (queue + stats fan-out).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-grade-records
+spec:
+  podSelector:
+    matchLabels:
+      app: service-grade-records
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-gateway
+        - podSelector:
+            matchLabels:
+              app: service-bff
+      ports:
+        - port: 8000
+---
+# ─────────────────────────────────────────────────────────────────────
+# File storage: gateway (presigned-url issuance + download proxy) and
+# submission (the orchestrator that creates the FileRefs).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-file-storage
+spec:
+  podSelector:
+    matchLabels:
+      app: service-file-storage
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: service-gateway
+        - podSelector:
+            matchLabels:
+              app: service-submission
+      ports:
+        - port: 8000

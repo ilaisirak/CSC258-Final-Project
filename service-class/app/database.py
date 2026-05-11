@@ -1,14 +1,19 @@
 # Sets up the async database engine, session factory, and base model class for SQLAlchemy. 
 # Also provides the get_db dependency injected into routes.
 
+import os
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from app.config import DATABASE_URL
 
 # Async engine — connects to PostgreSQL using the URL from config.
-# echo=True logs all generated SQL statements to stdout during development.
-# Good for debugging, set to false for production.
-engine = create_async_engine(DATABASE_URL, echo=True)
+# SQL_ECHO=true logs all generated SQL statements to stdout during
+# development. Defaults to false in production.
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+)
 
 # Session factory — produces AsyncSession objects bound to the engine.
 # expire_on_commit=False prevents SQLAlchemy from expiring ORM attributes

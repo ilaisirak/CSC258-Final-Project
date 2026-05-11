@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-enrollment-config
+data:
+  pgbouncer.ini: |
+    [databases]
+    enrollment = host=enrollment-db port=5432 dbname=enrollment user=dev password=devpassword
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    auth_type = md5
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = transaction
+    max_client_conn = 100
+    default_pool_size = 20
+  userlist.txt: |
+    "dev" "devpassword"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-enrollment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service-enrollment
+  template:
+    metadata:
+      labels:
+        app: service-enrollment
+    spec:
+      containers:
+      - name: service-enrollment
+        image: service-enrollment:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql+asyncpg://dev:devpassword@localhost:6432/enrollment"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+      - name: pgbouncer
+        image: edoburu/pgbouncer:latest
+        volumeMounts:
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/pgbouncer.ini
+          subPath: pgbouncer.ini
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer/userlist.txt
+          subPath: userlist.txt
+        ports:
+        - containerPort: 6432
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+      volumes:
+      - name: pgbouncer-config
+        configMap:
+          name: pgbouncer-enrollment-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-enrollment
+spec:
+  selector:
+    app: service-enrollment
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP

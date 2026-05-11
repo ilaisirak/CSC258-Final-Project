@@ -14,9 +14,14 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   role: Role | null;
-  signIn: (role: Role, name: string) => Promise<User>;
+  signIn: (email: string, password: string) => Promise<User>;
   signOut: () => Promise<void>;
-  register: (name: string, email: string, role: Role) => Promise<User>;
+  register: (input: {
+    name: string;
+    email: string;
+    password: string;
+    role: Role;
+  }) => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -25,6 +30,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // On boot, attempt to hydrate the session. The api.users.me adapter
+  // is responsible for inspecting any persisted token and returning the
+  // user it represents (or null if the token is missing/expired). We do
+  // not need to manage the token directly here.
   useEffect(() => {
     let cancelled = false;
     api.users
@@ -40,23 +49,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const register = useCallback<AuthContextValue["register"]>(
-    async (name, email, role) => {
-      await api.users.createUser({ name, email, role });
-      const signedInUser = await api.users.signIn(role, name);
-      setUser(signedInUser);
-      return signedInUser;
+  const register = useCallback(
+    async (input: {
+      name: string;
+      email: string;
+      password: string;
+      role: Role;
+    }) => {
+      const session = await api.users.register(input);
+      setUser(session.user);
+      return session.user;
     },
-    []
+    [],
   );
 
-  const signIn = useCallback<AuthContextValue["signIn"]>(async (role, name) => {
-    const u = await api.users.signIn(role, name);
-    setUser(u);
-    return u;
+  const signIn = useCallback(async (email: string, password: string) => {
+    const session = await api.users.signIn(email, password);
+    setUser(session.user);
+    return session.user;
   }, []);
 
-  const signOut = useCallback<AuthContextValue["signOut"]>(async () => {
+  const signOut = useCallback(async () => {
     await api.users.signOut();
     setUser(null);
   }, []);

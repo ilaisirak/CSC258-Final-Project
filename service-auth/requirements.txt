@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+asyncpg
+alembic
+email-validator
+fastapi-users[sqlalchemy]
+httpx

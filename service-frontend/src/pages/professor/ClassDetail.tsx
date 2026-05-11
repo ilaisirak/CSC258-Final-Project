@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ClipboardList, Plus, Users } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, ClipboardList, Pencil, Plus, Users } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/layout";
 import {
   Avatar,
@@ -30,10 +30,13 @@ const tabs: TabItem[] = [
 
 export function ProfessorClassDetailPage() {
   const { classId = "" } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const toast = useToast();
   const [tab, setTab] = useState("overview");
   const [newOpen, setNewOpen] = useState(false);
+  // When set, the modal is in edit-mode for this assignment id.
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const classQ = useQuery(() => api.classes.get(classId), [classId]);
   const assignsQ = useQuery(() => api.assignments.listForClass(classId), [classId]);
@@ -59,37 +62,87 @@ export function ProfessorClassDetailPage() {
     }),
   );
 
-  const handleCreateAssign = async () => {
+  const updateAssign = useMutation(async (id: string) =>
+    api.assignments.update(id, {
+      classId,
+      title: aTitle.trim(),
+      description: aDesc.trim(),
+      dueAt: new Date(aDue).toISOString(),
+      pointsPossible: aPoints,
+      status: aStatus,
+      allowResubmission: aResub,
+    }),
+  );
+
+  const resetForm = () => {
+    setATitle("");
+    setADesc("");
+    setADue(defaultDueAt());
+    setAPoints(100);
+    setAStatus("open");
+    setAResub(true);
+  };
+
+  const openEdit = (a: {
+    id: string;
+    title: string;
+    description: string;
+    dueAt: string;
+    pointsPossible: number;
+    status: AssignmentStatus;
+    allowResubmission: boolean;
+  }) => {
+    setEditingId(a.id);
+    setATitle(a.title);
+    setADesc(a.description ?? "");
+    // <input type="datetime-local"> wants YYYY-MM-DDTHH:mm, no seconds/tz.
+    const d = new Date(a.dueAt);
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    setADue(
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    );
+    setAPoints(a.pointsPossible);
+    setAStatus(a.status);
+    setAResub(a.allowResubmission);
+    setNewOpen(true);
+  };
+
+  const closeModal = () => {
+    setNewOpen(false);
+    setEditingId(null);
+    resetForm();
+  };
+
+  const handleSaveAssign = async () => {
     if (!aTitle.trim()) {
       toast.error("Title required");
       return;
     }
     try {
-      await createAssign.mutate(undefined as never);
-      toast.success("Assignment created");
-      setNewOpen(false);
-      setATitle("");
-      setADesc("");
+      if (editingId) {
+        await updateAssign.mutate(editingId);
+        toast.success("Assignment updated");
+      } else {
+        await createAssign.mutate(undefined as never);
+        toast.success("Assignment created");
+      }
+      closeModal();
       assignsQ.refetch();
       classQ.refetch();
     } catch (err) {
-      toast.error("Couldn't create", err instanceof Error ? err.message : undefined);
+      toast.error(
+        editingId ? "Couldn't update" : "Couldn't create",
+        err instanceof Error ? err.message : undefined,
+      );
     }
   };
 
-  // Roster add – updated: resolve email to UUID first
+  // Roster add by email — single backend call resolves the email and enrolls.
   const [emailInput, setEmailInput] = useState("");
 
-  // This mutation now accepts an email, searches for the user, then enrolls via UUID
-  const addStudent = useMutation(async (email: string) => {
-    const users = await api.users.search({ email });
-    if (users.length === 0) {
-      throw new Error("No user found with that email. Create an account first.");
-    }
-    const student = users[0];
-    await api.classes.addStudent(classId, student.id);
-    return student;
-  });
+  const addStudent = useMutation((email: string) =>
+    api.classes.addStudentByEmail(classId, email),
+  );
 
   const removeStudent = useMutation(async (uid: string) => api.classes.removeStudent(classId, uid));
 
@@ -158,7 +211,7 @@ export function ProfessorClassDetailPage() {
               title="No assignments yet"
               description="Create one to make it visible to students."
               action={
-                <Button iconLeft={<Plus size={16} />} onClick={() => setNewOpen(true)}>
+                <Button iconLeft={<Plus size={16} />} onClick={() => { resetForm(); setEditingId(null); setNewOpen(true); }}>
                   New assignment
                 </Button>
               }
@@ -167,11 +220,8 @@ export function ProfessorClassDetailPage() {
             sortedAssigns.map((a) => {
               const tone = dueTone(a.dueAt);
               return (
-                <Card key={a.id} padding="md" interactive>
-                  <Link
-                    to={`/professor/classes/${classId}/assignments/${a.id}/grade`}
-                    className={styles.assignRow}
-                  >
+                <Card key={a.id} padding="md">
+                  <div className={styles.assignRow}>
                     <div>
                       <strong>{a.title}</strong>
                       <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-muted)" }}>
@@ -189,11 +239,25 @@ export function ProfessorClassDetailPage() {
                       >
                         {a.status}
                       </Badge>
-                      <Button variant="secondary" size="sm">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        iconLeft={<Pencil size={14} />}
+                        onClick={() => openEdit(a)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          navigate(`/professor/classes/${classId}/assignments/${a.id}/grade`)
+                        }
+                      >
                         Grade
                       </Button>
                     </div>
-                  </Link>
+                  </div>
                 </Card>
               );
             })
@@ -298,7 +362,7 @@ export function ProfessorClassDetailPage() {
               padding: "var(--space-4)",
               animation: "fade var(--dur-base) ease-out",
             }}
-            onClick={() => setNewOpen(false)}
+            onClick={closeModal}
           />
           {/* Dialog */}
           <div
@@ -323,7 +387,7 @@ export function ProfessorClassDetailPage() {
           >
             <div style={{ padding: "var(--space-5)", borderBottom: "1px solid var(--c-border)" }}>
               <h3 style={{ fontSize: "var(--fs-xl)", marginBottom: "var(--space-1)" }}>
-                New assignment
+                {editingId ? "Edit assignment" : "New assignment"}
               </h3>
               <p style={{ color: "var(--c-text-muted)", fontSize: "var(--fs-sm)" }}>
                 Students in this class will see it once status is open.
@@ -411,8 +475,10 @@ export function ProfessorClassDetailPage() {
               </div>
             </div>
             <div style={{ padding: "var(--space-4)", borderTop: "1px solid var(--c-border)", display: "flex", justifyContent: "flex-end", gap: "var(--space-2)" }}>
-              <Button variant="ghost" onClick={() => setNewOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreateAssign} loading={createAssign.loading}>Create</Button>
+              <Button variant="ghost" onClick={closeModal}>Cancel</Button>
+              <Button onClick={handleSaveAssign} loading={createAssign.loading || updateAssign.loading}>
+                {editingId ? "Save changes" : "Create"}
+              </Button>
             </div>
           </div>
         </>

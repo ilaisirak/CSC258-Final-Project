@@ -1,3 +1,6 @@
+# Static SPA. All API routes / auth_request live in service-gateway.
+# The container is cluster-internal: it has no Ingress binding and is
+# reached only by service-gateway via reverse proxy for "/".
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,8 +13,6 @@ data:
       root /usr/share/nginx/html;
       index index.html;
 
-      client_max_body_size 50m;
-
       location /assets/ {
         expires 30d;
         add_header Cache-Control "public, immutable";
@@ -20,37 +21,6 @@ data:
 
       location / {
         try_files $uri $uri/ /index.html;
-      }
-
-      location /api/users {
-        proxy_pass http://service-user:80;
-        rewrite ^/api(/.*)$ $1 break;
-        proxy_set_header Host $host;
-      }
-      location /api/classes {
-        proxy_pass http://service-class:80;
-        rewrite ^/api(/.*)$ $1 break;
-        proxy_set_header Host $host;
-      }
-      location /api/assignments {
-        proxy_pass http://service-assignment:80;
-        rewrite ^/api(/.*)$ $1 break;
-        proxy_set_header Host $host;
-      }
-      location /api/submissions {
-        proxy_pass http://service-submission:80;
-        rewrite ^/api(/.*)$ $1 break;
-        proxy_set_header Host $host;
-      }
-      location /api/submit {
-        proxy_pass http://service-submission:80;
-        rewrite ^/api(/.*)$ $1 break;
-        proxy_set_header Host $host;
-      }
-      location /api/grading {
-        proxy_pass http://service-grading:80;
-        rewrite ^/api(/.*)$ $1 break;
-        proxy_set_header Host $host;
       }
     }
 ---

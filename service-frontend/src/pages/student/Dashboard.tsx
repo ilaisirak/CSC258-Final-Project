@@ -9,7 +9,6 @@ import { StatCard } from "@/components/domain/StatCard";
 import { useAuth } from "@/app/AuthContext";
 import { api } from "@/api/client";
 import { useQuery } from "@/api/hooks";
-import { gradePercent } from "@/lib/format";
 import layouts from "@/styles/layouts.module.css";
 
 export function StudentDashboardPage() {
@@ -18,12 +17,13 @@ export function StudentDashboardPage() {
 
   const classesQ = useQuery(() => api.classes.list({ studentId }), [studentId]);
   const assignsQ = useQuery(() => api.assignments.listForStudent(studentId), [studentId]);
+  const statsQ = useQuery(() => api.grading.studentStats(studentId), [studentId]);
 
+  // Upcoming list shown on the dashboard — backend authority on isOpen.
   const upcoming = useMemo(() => {
     if (!assignsQ.data) return [];
-    const now = Date.now();
     return [...assignsQ.data]
-      .filter((x) => new Date(x.assignment.dueAt).getTime() >= now)
+      .filter((x) => x.assignment.isOpen && !x.submission)
       .sort(
         (a, b) =>
           new Date(a.assignment.dueAt).getTime() - new Date(b.assignment.dueAt).getTime(),
@@ -31,27 +31,19 @@ export function StudentDashboardPage() {
       .slice(0, 4);
   }, [assignsQ.data]);
 
+  // Recent grades come from the backend stats endpoint, but we still need
+  // assignment/class display info to render an AssignmentRow. Join in-place
+  // against the assignments-for-student response (already in memory).
   const recentGrades = useMemo(() => {
-    if (!assignsQ.data) return [];
-    return assignsQ.data
-      .filter((x) => x.submission?.grade)
-      .sort(
-        (a, b) =>
-          new Date(b.submission!.grade!.gradedAt).getTime() -
-          new Date(a.submission!.grade!.gradedAt).getTime(),
-      )
-      .slice(0, 4);
-  }, [assignsQ.data]);
+    if (!assignsQ.data || !statsQ.data) return [];
+    const ids = new Set(statsQ.data.recentGrades.map((g) => g.submissionId));
+    return assignsQ.data.filter((x) => x.submission && ids.has(x.submission.id));
+  }, [assignsQ.data, statsQ.data]);
 
-  const avgPct = useMemo(() => {
-    const graded = (assignsQ.data ?? []).filter((x) => x.submission?.grade);
-    if (graded.length === 0) return null;
-    const sum = graded.reduce(
-      (acc, x) => acc + gradePercent(x.submission!.grade!.score, x.submission!.grade!.pointsPossible),
-      0,
-    );
-    return Math.round(sum / graded.length);
-  }, [assignsQ.data]);
+  const avgPct =
+    statsQ.data?.avgGrade === null || statsQ.data?.avgGrade === undefined
+      ? null
+      : Math.round(statsQ.data.avgGrade);
 
   return (
     <PageContainer>
@@ -70,7 +62,7 @@ export function StudentDashboardPage() {
         />
         <StatCard
           label="Upcoming"
-          value={upcoming.length}
+          value={statsQ.data?.upcomingCount ?? upcoming.length}
           icon={<CalendarClock size={18} />}
           tone="warning"
           hint={upcoming[0] ? `Next: ${upcoming[0].assignment.title}` : undefined}

@@ -10,7 +10,9 @@ This application lets professors and students interact with a simple grading por
 
 **Professors** can create classes, add assignments, and set due dates. They can view student rosters and add students by email (no pre-registration required — the system resolves email to an account), grade submitted work, leave feedback, and see submitted files directly in the browser through presigned storage links.
 
-**Students** can sign up with just a name, email, and role — no password required. They can enroll in classes, submit assignments (with file uploads), and view grades and feedback from a dashboard that groups all assignments by class.
+**Students** can register with their name, email, password and role, then sign in to enroll in classes, submit assignments (with file uploads), and view grades and feedback from a dashboard that groups all assignments by class.
+
+Authentication is handled by [`fastapi-users`](https://fastapi-users.github.io/fastapi-users/) with bcrypt-hashed passwords. `service-user` issues short-lived JWT access tokens (15 min) at `/auth/login` and rotating opaque refresh tokens delivered as `HttpOnly; SameSite=Lax` cookies scoped to `/api/auth`. Edge token validation happens in the Nginx gateway via an `auth_request` subrequest to `/auth/verify`, which strips the bearer token and re-injects identity as `X-Auth-User-{Id,Role,Name,Email}` request headers. Backend services trust those gateway-injected headers and never see the JWT, so only `service-user` holds the signing secret. Service-to-service traffic in Compose is protected by mutual TLS — see **Security architecture** below.
 
 Both roles use a single-page React frontend that communicates with a RESTful API. The entire system is self-contained — run it with one command on a single machine, or scale it to many replicas with Kubernetes.
 
@@ -23,7 +25,7 @@ Both roles use a single-page React frontend that communicates with a RESTful API
   - `service-class` — classes, rosters, enrollments
   - `service-assignment` — assignments
   - `service-submission` — file uploads (stored in MinIO)
-  - `service-grading` — grades and feedback
+  - `service-grade-records` — grades and feedback
   - `service-frontend` — React/TypeScript app served by Nginx
 - **Per-service database with persistent storage** via Kubernetes StatefulSets and PVCs
 - **Connection pooling** via PgBouncer sidecars to keep database connections optimal when autoscaling
@@ -75,7 +77,35 @@ STORAGE_TYPE=minio
 MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
+
+# Shared HMAC secret used to sign and verify JWT access tokens.
+# Replace with a strong random value before any non-local deployment
+# (e.g. `openssl rand -hex 32`).
+AUTH_SECRET=dev-only-change-me-please-32bytes-min
+JWT_LIFETIME_SECONDS=900
+REFRESH_LIFETIME_SECONDS=604800
+REFRESH_COOKIE_SECURE=false
 ```
+
+### Generate development TLS certificates
+
+The Compose stack enforces mTLS between every service. Before the first `docker-compose up`, generate a local CA and per-service certificates:
+
+```powershell
+# Windows / PowerShell
+./scripts/gen-certs.ps1
+```
+
+```bash
+# macOS / Linux
+./scripts/gen-certs.sh
+```
+
+This writes `certs/ca.crt`, `certs/ca.key`, and a `<service>.crt` / `<service>.key` pair for each backend plus the Nginx frontend. The `certs/` directory is mounted read-only into every container at `/etc/svc-certs`. Re-run with `-Force` (PowerShell) or simply re-run the bash script to regenerate.
+
+### First-Run Sign Up
+
+The app starts with an empty user database. From the login page click **Create one** and register a professor account first — then you can register additional student accounts (or have students self-register) and add them to a class by email.
 
 ### Useful Commands
 
@@ -89,13 +119,28 @@ MINIO_SECRET_KEY=minioadmin
 
 | Component | URL |
 |---|---|
-| Frontend | http://localhost:3000 |
-| service-user | http://localhost:8005/health (docs at `/docs`) |
-| service-class | http://localhost:8002/health |
-| service-assignment | http://localhost:8001/health |
-| service-submission | http://localhost:8004/health |
-| service-grading | http://localhost:8003/health |
+| Frontend / API gateway | http://localhost:3000 |
 | MinIO Console | http://localhost:9001 |
+
+Backend services are intentionally **not** exposed on host ports. They listen on HTTPS inside the Compose network and only accept connections that present a client certificate signed by the dev CA. Reach them through the gateway at `http://localhost:3000/api/...`. To poke at a backend directly during debugging, exec into a container that has a mounted client cert:
+
+```bash
+docker compose exec service-user curl --cacert /etc/svc-certs/ca.crt \
+    --cert /etc/svc-certs/service-user.crt --key /etc/svc-certs/service-user.key \
+    https://service-user:8000/health
+```
+
+---
+
+## Security architecture
+
+The Compose deployment models a small distributed system with these properties:
+
+1. **Edge token validation in the API gateway.** Nginx terminates client TLS, then for every protected route runs an internal `auth_request` to `service-user` `/auth/verify`. The auth service decodes the bearer JWT and writes `X-Auth-User-{Id,Role,Name,Email}` response headers, which the gateway captures and re-injects as request headers before proxying upstream. Public auth endpoints (`/api/auth/*`) explicitly *strip* any client-supplied `X-Auth-User-*` headers to prevent header smuggling.
+2. **Short-lived access tokens + rotating refresh tokens.** Access tokens are 15-minute HS256 JWTs carrying `sub`, `role`, `name`, `email`. Refresh tokens are opaque 256-bit secrets stored SHA-256-hashed in `service-user`'s database, delivered as `HttpOnly; Secure-when-prod; SameSite=Lax` cookies scoped to `/api/auth`, and rotated on every `/auth/refresh`. Logout revokes the row and clears the cookie. The frontend keeps the access token only in a module-scoped JS variable, never `localStorage`.
+3. **Local authorization in each service.** Every backend exposes a `require_role(...)` dependency that reads gateway-injected headers and rejects requests whose role doesn't match. The auth headers are the only identity input — no service re-validates JWTs or holds the signing secret.
+4. **mTLS service mesh.** Each service has its own certificate signed by the local dev CA and uvicorn is started with `--ssl-cert-reqs 2` (CERT_REQUIRED). Every outbound peer call uses `mtls_client()` (httpx with `verify=ca.crt, cert=(svc.crt, svc.key)`). Nginx presents `frontend.crt` as a client certificate when proxying. A request from outside the Compose network — even with a valid bearer token — fails the TLS handshake before any HTTP code runs (try `curl https://service-user:8000/health` from a container without a cert: exit code 56).
+5. **Kubernetes caveat.** The manifests in `kubernetes/` do *not* enable mTLS between pods. In a real cluster this layer would be supplied by a service mesh (Linkerd or Istio sidecars / ambient) rather than baked into application code. The Compose stack is therefore the canonical security demo for the project.
 
 ---
 

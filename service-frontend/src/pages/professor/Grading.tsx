@@ -14,7 +14,6 @@ import {
   useToast,
 } from "@/components/ui";
 import { SubmissionStatusBadge } from "@/components/domain/SubmissionStatusBadge";
-import { useAuth } from "@/app/AuthContext";
 import { api } from "@/api/client";
 import { useMutation, useQuery } from "@/api/hooks";
 import { formatDateTime, gradePercent } from "@/lib/format";
@@ -23,7 +22,6 @@ import styles from "./Grading.module.css";
 
 export function ProfessorGradingPage() {
   const { classId = "", assignmentId = "" } = useParams();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -94,7 +92,6 @@ export function ProfessorGradingPage() {
       score,
       pointsPossible: assignQ.data.pointsPossible,
       feedback: draft!.feedback || undefined,
-      gradedById: user!.id,
     });
   });
 

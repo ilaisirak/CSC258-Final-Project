@@ -7,3 +7,11 @@
 
 # Locust files generate pycache files, which we don't want to commit
 /test/__pycache__/*
+# Stray smoke-test cookie jars
+cookies*.txt
+
+# mTLS dev material — generated locally by scripts/gen-certs.{sh,ps1}
+# and by the certs-init compose service. Never commit.
+certs/*
+!certs/.gitkeep
+

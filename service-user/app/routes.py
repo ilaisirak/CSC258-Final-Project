@@ -1,68 +1,99 @@
-# Defines the HTTP endpoints for the user service.
-# All routes are async and use the get_db dependency for database access.
+# HTTP endpoints owned by the user service.
+#
+# Two surfaces are exposed:
+#
+#   1. Public (gateway-facing) routes:
+#        GET   /users                       (authenticated)
+#        GET   /users/search                (authenticated)
+#        GET   /users/by-id/{user_id}       (authenticated)
+#        GET   /users/me                    (authenticated)
+#        PATCH /users/me                    (authenticated)
+#
+#   2. Internal (service-auth-only) routes:
+#        GET    /users/internal/by-email
+#        GET    /users/internal/by-id/{user_id}
+#        POST   /users/internal
+#        PATCH  /users/internal/by-id/{user_id}
+#        DELETE /users/internal/by-id/{user_id}
+#
+# Internal routes return the bcrypt hashed_password so service-auth can
+# verify credentials. They MUST be reachable only over cluster-internal
+# mTLS — the gateway does not proxy /users/internal/* to anyone.
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth import CurrentUser, get_current_user
 from app.database import get_db
 from app.models import User
-from app.schemas import UserCreate, UserSignIn, UserResponse
+from app.schemas import (
+    UserInternal,
+    UserInternalCreate,
+    UserInternalUpdate,
+    UserPublic,
+    UserRead,
+    UserUpdate,
+)
 
 router = APIRouter()
 
-# Returns the currently authenticated user by reading their UUID from
-# the X-User-Id request header. Returns None if the header is absent,
-# which the frontend treats as an unauthenticated state.
-# Note: this is a simplified session mechanism. A production implementation
-# would use JWT tokens instead of a plain user ID header.
-@router.get("/users/me")
-async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = request.headers.get("X-User-Id")
-    if not user_id:
-        # Return null explicitly rather than None which causes serialization error
-        return JSONResponse(content=None, status_code=200)
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        return JSONResponse(content=None, status_code=200)
-    return user
 
-# Looks up a user by name and role combination.
-# Returns 404 if no matching user is found.
-# Note: this is a placeholder sign-in mechanism for development.
-# A production implementation would verify a password hash.
-@router.post("/users/sign-in", response_model=UserResponse)
-async def sign_in(payload: UserSignIn, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(User).where(User.name == payload.name, User.role == payload.role)
-    )
+# ---------------------------------------------------------------------------
+# Public routes — used by the SPA and peer services
+# ---------------------------------------------------------------------------
+
+@router.get("/users/me", response_model=UserRead)
+async def read_me(
+    db: AsyncSession = Depends(get_db),
+    current: CurrentUser = Depends(get_current_user),
+):
+    result = await db.execute(select(User).where(User.id == current.id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-# Stateless sign-out endpoint. Since authentication is currently handled
-# via a header rather than a server-side session, no state needs to be
-# cleared on the backend — the frontend is responsible for dropping the token.
-@router.post("/users/sign-out")
-async def sign_out():
-    return {"message": "Signed out"}
 
-# Retrieve all registered users.
-# Used by the class roster and add-student flows.
-@router.get("/users", response_model=list[UserResponse])
-async def list_users(db: AsyncSession = Depends(get_db)):
+@router.patch("/users/me", response_model=UserRead)
+async def update_me(
+    body: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current: CurrentUser = Depends(get_current_user),
+):
+    result = await db.execute(select(User).where(User.id == current.id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if body.name is not None:
+        user.name = body.name
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+# Retrieve all registered users. Used by the professor-side class roster
+# UI to suggest existing students.
+@router.get("/users", response_model=list[UserPublic])
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(get_current_user),
+):
     result = await db.execute(select(User))
     return result.scalars().all()
 
-# Search users by email or name – used by the frontend to resolve
-# a student’s UUID before enrolling them in a class.
-@router.get("/users/search", response_model=list[UserResponse])
+
+# Search users by email or name. service-class calls this to resolve a
+# student's UUID from the email a professor types into the roster form.
+@router.get("/users/search", response_model=list[UserPublic])
 async def search_users(
-    email: str = None,
-    name: str = None,
-    db: AsyncSession = Depends(get_db)
+    email: str | None = None,
+    name: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(get_current_user),
 ):
     query = select(User)
     if email:
@@ -72,27 +103,114 @@ async def search_users(
     result = await db.execute(query)
     return result.scalars().all()
 
-# Retrieve a single user by their UUID.
-# Called by other services that need to resolve a user ID to a name or role.
-# Returns 404 if no user with the given ID exists.
-@router.get("/users/{user_id}", response_model=UserResponse)
-async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
+
+# Resolve a single user by their UUID. Mounted at /users/by-id/{user_id}
+# so it does not collide with /users/me.
+@router.get("/users/by-id/{user_id}", response_model=UserPublic)
+async def get_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: CurrentUser = Depends(get_current_user),
+):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-# Register a new user account.
-# Checks for an existing account with the same email before inserting,
-# returning 409 Conflict if a duplicate is found.
-@router.post("/users", response_model=UserResponse)
-async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
-    existing = await db.execute(select(User).where(User.email == payload.email))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Email already registered")
-    user = User(**payload.model_dump())
+
+# ---------------------------------------------------------------------------
+# Internal routes — service-auth only, returns hashed_password
+# ---------------------------------------------------------------------------
+# Authorization model: cluster-internal mTLS guarantees the caller is
+# another backend service holding a cert signed by our CA. Currently
+# only service-auth has a legitimate need to call these. We do not add
+# additional service-identity checks here — adding them is a planned
+# future hardening step and would be implemented by inspecting the
+# verified peer certificate CN.
+
+internal_router = APIRouter(prefix="/users/internal", tags=["internal"])
+
+
+@internal_router.get("/by-email", response_model=UserInternal)
+async def internal_get_by_email(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@internal_router.get("/by-id/{user_id}", response_model=UserInternal)
+async def internal_get_by_id(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@internal_router.post("", response_model=UserInternal, status_code=status.HTTP_201_CREATED)
+async def internal_create(
+    body: UserInternalCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    user = User(
+        id=uuid.uuid4(),
+        email=body.email,
+        hashed_password=body.hashed_password,
+        is_active=body.is_active,
+        is_superuser=body.is_superuser,
+        is_verified=body.is_verified,
+        name=body.name,
+        role=body.role,
+    )
     db.add(user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     await db.refresh(user)
     return user
+
+
+@internal_router.patch("/by-id/{user_id}", response_model=UserInternal)
+async def internal_update(
+    user_id: uuid.UUID,
+    body: UserInternalUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+    await db.refresh(user)
+    return user
+
+
+@internal_router.delete("/by-id/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def internal_delete(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        return
+    await db.delete(user)
+    await db.commit()
+

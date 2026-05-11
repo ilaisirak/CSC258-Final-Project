@@ -41,7 +41,6 @@ export function StudentAssignmentDetailPage() {
     const sub = await api.submissions.submit({
       assignmentId,
       studentId: user!.id,
-      studentName: user!.name,
       files,
     });
     return sub;

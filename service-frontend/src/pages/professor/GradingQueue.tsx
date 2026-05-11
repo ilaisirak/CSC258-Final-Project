@@ -13,32 +13,17 @@ export function ProfessorGradingQueuePage() {
   const { user } = useAuth();
   const profId = user!.id;
 
-  const queueQ = useQuery(async () => {
-    const classes = await api.classes.list({ professorId: profId });
-    const items = await Promise.all(
-      classes.map(async (c) => {
-        const assigns = await api.assignments.listForClass(c.id);
-        const subsByAssign = await Promise.all(
-          assigns.map(async (a) => {
-            const subs = await api.submissions.listForAssignment(a.id);
-            return subs
-              .filter((s) => !s.grade)
-              .map((s) => ({ sub: s, assignment: a, cls: c }));
-          }),
-        );
-        return subsByAssign.flat();
-      }),
-    );
-    return items.flat();
-  }, [profId]);
+  const queueQ = useQuery(() => api.grading.gradingQueue(profId), [profId]);
 
+  // The backend already returns oldest-first; reverse here for newest-first display.
   const sorted = useMemo(
     () =>
       (queueQ.data ?? [])
         .slice()
         .sort(
           (a, b) =>
-            new Date(b.sub.submittedAt).getTime() - new Date(a.sub.submittedAt).getTime(),
+            new Date(b.submission.submittedAt).getTime() -
+            new Date(a.submission.submittedAt).getTime(),
         ),
     [queueQ.data],
   );
@@ -63,38 +48,43 @@ export function ProfessorGradingQueuePage() {
         />
       ) : (
         <div className={layouts.list}>
-          {sorted.map(({ sub, assignment, cls }) => (
-            <Card key={sub.id} padding="md" interactive>
-              <Link
-                to={`/professor/classes/${cls.id}/assignments/${assignment.id}/grade`}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "var(--space-3)",
-                  color: "inherit",
-                }}
-              >
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                    <Badge tone="accent" size="sm">
-                      {cls.code}
-                    </Badge>
-                    <strong>{assignment.title}</strong>
+          {sorted.map((item) => {
+            const sub = item.submission;
+            const assignment = item.assignment;
+            const cls = item.class;
+            return (
+              <Card key={sub.id} padding="md" interactive>
+                <Link
+                  to={`/professor/classes/${cls.id}/assignments/${assignment.id}/grade`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "var(--space-3)",
+                    color: "inherit",
+                  }}
+                >
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                      <Badge tone="accent" size="sm">
+                        {cls.code}
+                      </Badge>
+                      <strong>{assignment.title}</strong>
+                    </div>
+                    <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-muted)" }}>
+                      {sub.studentName} ·{" "}
+                      <span title={formatDateTime(sub.submittedAt)}>
+                        submitted {relativeTime(sub.submittedAt)}
+                      </span>
+                    </div>
                   </div>
-                  <div style={{ fontSize: "var(--fs-xs)", color: "var(--c-text-muted)" }}>
-                    {sub.studentName} ·{" "}
-                    <span title={formatDateTime(sub.submittedAt)}>
-                      submitted {relativeTime(sub.submittedAt)}
-                    </span>
-                  </div>
-                </div>
-                <Button variant="secondary" size="sm">
-                  Open
-                </Button>
-              </Link>
-            </Card>
-          ))}
+                  <Button variant="secondary" size="sm">
+                    Open
+                  </Button>
+                </Link>
+              </Card>
+            );
+          })}
         </div>
       )}
     </PageContainer>

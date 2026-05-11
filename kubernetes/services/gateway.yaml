@@ -1,0 +1,201 @@
+# Edge API gateway. Owns all /api/* routing and the SPA reverse-proxy.
+# The Ingress backend points here (single backend for cluster ingress).
+#
+# NOTE: this k8s ConfigMap intentionally uses plain HTTP for upstreams —
+# in-cluster service-to-service traffic in the k8s deployment relies on
+# NetworkPolicies for isolation rather than mTLS. The docker-compose
+# gateway image enforces mTLS using mounted dev certs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-nginx-config
+data:
+  default.conf: |
+    server {
+      listen 80;
+      server_name _;
+      client_max_body_size 50m;
+
+      # Internal subrequest target for JWT validation.
+      location = /_auth_verify {
+        internal;
+        proxy_pass http://service-auth:80/auth/verify;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-URI $request_uri;
+      }
+
+      # Public auth endpoints — no auth_request.
+      location /api/auth {
+        proxy_pass http://service-auth:80;
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-User-Id    "";
+        proxy_set_header X-Auth-User-Role  "";
+        proxy_set_header X-Auth-User-Name  "";
+        proxy_set_header X-Auth-User-Email "";
+      }
+
+      location /api/users {
+        auth_request /_auth_verify;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_name  $upstream_http_x_auth_user_name;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+        proxy_pass http://service-user:80;
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Name  $auth_user_name;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+      }
+      location /api/classes {
+        auth_request /_auth_verify;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_name  $upstream_http_x_auth_user_name;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+        proxy_pass http://service-class:80;
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Name  $auth_user_name;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+      }
+      location /api/assignments {
+        auth_request /_auth_verify;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_name  $upstream_http_x_auth_user_name;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+        proxy_pass http://service-assignment:80;
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Name  $auth_user_name;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+      }
+      location /api/submissions {
+        auth_request /_auth_verify;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_name  $upstream_http_x_auth_user_name;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+        proxy_pass http://service-submission:80;
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Name  $auth_user_name;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+      }
+      location /api/grading {
+        auth_request /_auth_verify;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_name  $upstream_http_x_auth_user_name;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+        proxy_pass http://service-grade-records:80;
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Name  $auth_user_name;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+      }
+      location /api/students {
+        auth_request /_auth_verify;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_name  $upstream_http_x_auth_user_name;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+        proxy_pass http://service-grade-records:80;
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Name  $auth_user_name;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+      }
+      location /api/professors {
+        auth_request /_auth_verify;
+        auth_request_set $auth_user_id    $upstream_http_x_auth_user_id;
+        auth_request_set $auth_user_role  $upstream_http_x_auth_user_role;
+        auth_request_set $auth_user_name  $upstream_http_x_auth_user_name;
+        auth_request_set $auth_user_email $upstream_http_x_auth_user_email;
+        proxy_pass http://service-grade-records:80;
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-User-Id    $auth_user_id;
+        proxy_set_header X-Auth-User-Role  $auth_user_role;
+        proxy_set_header X-Auth-User-Name  $auth_user_name;
+        proxy_set_header X-Auth-User-Email $auth_user_email;
+      }
+
+      # Static SPA — reverse-proxied from service-frontend.
+      location / {
+        proxy_pass http://service-frontend:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-gateway
+  labels:
+    app: service-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service-gateway
+  template:
+    metadata:
+      labels:
+        app: service-gateway
+    spec:
+      containers:
+        - name: service-gateway
+          image: grading-portal/service-gateway:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: gateway-nginx-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-gateway
+spec:
+  selector:
+    app: service-gateway
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

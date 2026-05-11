@@ -30,8 +30,6 @@ class ClassCreate(BaseModel):
     code: str
     name: str
     description: Optional[str] = None
-    professorId: UUID
-    professorName: str
     term: ClassTerm
 
     model_config = {"from_attributes": True, "populate_by_name": True}
@@ -77,6 +75,8 @@ class ClassResponse(BaseModel):
                 "professor_name": data.professor_name,
                 "student_count": getattr(data, "student_count", 0),
                 "assignment_count": getattr(data, "assignment_count", 0),
+                "studentCount": getattr(data, "student_count", 0),
+                "assignmentCount": getattr(data, "assignment_count", 0),
                 "term": {
                     "season": data.term_season,
                     "year": data.term_year,
@@ -85,17 +85,3 @@ class ClassResponse(BaseModel):
                 }
             }
         return data
-
-# Represents a single enrollment record.
-class EnrollmentResponse(BaseModel):
-    id: UUID
-    classId: UUID      = Field(alias="class_id")
-    studentId: UUID    = Field(alias="student_id")
-    enrolledAt: datetime = Field(alias="enrolled_at")
-
-    model_config = {"from_attributes": True, "populate_by_name": True}
-
-# Request body for adding a student to a class by email.
-# The class service calls the user service to resolve the email to a UUID.
-class AddStudentRequest(BaseModel):
-    email: str

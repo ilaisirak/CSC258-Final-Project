@@ -6,6 +6,7 @@ setlocal enabledelayedexpansion
 :: ──────────────────────────────────────────────
 set "K8S_CLUSTER_NAME=csc258-final-project-cluster"
 set "FRONTEND_IMAGE=grading-portal/service-frontend:local"
+set "GATEWAY_IMAGE=grading-portal/service-gateway:local"
 set RETRY=0
 set MAX_RETRIES=10
 
@@ -34,8 +35,8 @@ if errorlevel 1 (
 echo Checking kind cluster "%K8S_CLUSTER_NAME%" ...
 kind get clusters | findstr /i /c:"%K8S_CLUSTER_NAME%" >nul
 if errorlevel 1 (
-    echo Cluster not found. Attempting to create it now...
-    kind create cluster --name %K8S_CLUSTER_NAME%
+    echo Cluster not found. Creating 1 control-plane + 2 worker nodes ^(kindest/node:v1.30.6^) ...
+    kind create cluster --config kind-config.yaml
     if errorlevel 1 (
         echo ERROR: Failed to create kind cluster "%K8S_CLUSTER_NAME%".
         echo Please check Docker and try again.
@@ -91,23 +92,38 @@ echo ============================================
 echo  Building service images ...
 echo ============================================
 
-echo [1/6] service-assignment
+echo [1/11] service-assignment
 docker build -t service-assignment:latest .\service-assignment || goto :error
 
-echo [2/6] service-class
+echo [2/11] service-auth
+docker build -t service-auth:latest .\service-auth || goto :error
+
+echo [3/11] service-class
 docker build -t service-class:latest .\service-class || goto :error
 
-echo [3/6] service-grading
-docker build -t service-grading:latest .\service-grading || goto :error
+echo [4/11] service-enrollment
+docker build -t service-enrollment:latest .\service-enrollment || goto :error
 
-echo [4/6] service-submission
+echo [5/11] service-bff
+docker build -t service-bff:latest .\service-bff || goto :error
+
+echo [6/11] service-grade-records
+docker build -t service-grade-records:latest .\service-grade-records || goto :error
+
+echo [7/11] service-submission
 docker build -t service-submission:latest .\service-submission || goto :error
 
-echo [5/6] service-user
+echo [8/11] service-user
 docker build -t service-user:latest .\service-user || goto :error
 
-echo [6/6] frontend
+echo [9/11] service-file-storage
+docker build -t service-file-storage:latest .\service-file-storage || goto :error
+
+echo [10/11] frontend
 docker build -t %FRONTEND_IMAGE% .\service-frontend || goto :error
+
+echo [11/11] service-gateway
+docker build -t %GATEWAY_IMAGE% .\service-gateway || goto :error
 
 :: ──────────────────────────────────────────────
 ::  Step 2 – Load images into kind
@@ -119,11 +135,16 @@ echo ============================================
 
 for %%i in (
     service-assignment:latest
+    service-auth:latest
     service-class:latest
-    service-grading:latest
+    service-enrollment:latest
+    service-bff:latest
+    service-grade-records:latest
     service-submission:latest
     service-user:latest
+    service-file-storage:latest
     %FRONTEND_IMAGE%
+    %GATEWAY_IMAGE%
 ) do (
     echo Loading %%i
     kind load docker-image %%i --name %K8S_CLUSTER_NAME% || goto :error
@@ -180,11 +201,11 @@ echo "Starting port-forwarding for MinIO (file uploads) in a new window..."
 start "MinIO Port-Forward" cmd /c "kubectl port-forward svc/minio 9000:9000" && echo MinIO Console: http://localhost:9001
 echo MinIO port-forward launched in a separate window.
 
-:: Frontend port‑forward (main entry point)
-echo "Starting port-forwarding to http://localhost:8080 (frontend)..."
+:: Gateway port-forward (main entry point — gateway routes / and /api/*)
+echo "Starting port-forwarding to http://localhost:8080 (gateway)..."
 echo.
 echo Port-forwarding... Press Ctrl+C to stop.
-kubectl port-forward svc/service-frontend 8080:80
+kubectl port-forward svc/service-gateway 8080:80
 
 pause
 exit /b 0

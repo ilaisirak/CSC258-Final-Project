@@ -1,37 +1,88 @@
-# Pydantic models used for request validation and response serialization
-# for the user service. All field names match the ORM model directly since
-# user fields are single words with no camelCase/snake_case mismatch.
+# Pydantic schemas for the user service.
+#
+# Two layers of schemas live here:
+#   - public: returned to the SPA / peer services. Excludes credential
+#     columns.
+#   - internal: returned only to service-auth on the /users/internal/*
+#     endpoints (cluster-internal mTLS only). Carries hashed_password.
+
+import uuid
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr
-from typing import Literal, Optional
-from uuid import UUID
 
-# Valid user roles — enforced at the schema level so invalid roles are
-# rejected before reaching the database.
+# Valid user roles — enforced at the schema layer.
 Role = Literal["student", "professor"]
 
-# Validates the request body for POST /users.
-# EmailStr performs format validation on the email field,
-# requiring email-validator to be installed in requirements.txt.
-class UserCreate(BaseModel):
-    name: str
-    email: EmailStr
-    role: Role
 
-# Validates the request body for POST /users/sign-in.
-# Sign-in currently matches by name and role rather than email and password.
-# This is a development placeholder — see routes.py for details.
-class UserSignIn(BaseModel):
-    role: Role
-    name: str
-
-# Shapes the response returned by all user endpoints.
-# No aliases are needed here since all field names are identical
-# in both Python and JSON (id, name, email, role).
-class UserResponse(BaseModel):
-    id: UUID
+class UserPublic(BaseModel):
+    """Public user shape — never includes credential fields."""
+    id: uuid.UUID
     name: str
     email: str
     role: Role
 
     model_config = {"from_attributes": True}
+
+
+class UserRead(BaseModel):
+    """Profile shape returned by GET /users/me."""
+    id: uuid.UUID
+    email: EmailStr
+    name: str
+    role: Role
+    is_active: bool = True
+
+    model_config = {"from_attributes": True}
+
+
+class UserUpdate(BaseModel):
+    """Body of PATCH /users/me — name only for now."""
+    name: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Internal schemas — only consumed by service-auth over mTLS.
+# ---------------------------------------------------------------------------
+
+class UserInternal(BaseModel):
+    """Full user row including the bcrypt hashed_password.
+
+    Returned to service-auth so it can verify credentials. Must NEVER
+    be serialized into a response that leaves the cluster.
+    """
+    id: uuid.UUID
+    email: str
+    hashed_password: str
+    is_active: bool = True
+    is_superuser: bool = False
+    is_verified: bool = False
+    name: str
+    role: Role
+
+    model_config = {"from_attributes": True}
+
+
+class UserInternalCreate(BaseModel):
+    """Body of POST /users/internal — sent by service-auth on register.
+
+    The password has already been hashed by service-auth's UserManager.
+    """
+    email: EmailStr
+    hashed_password: str
+    is_active: bool = True
+    is_superuser: bool = False
+    is_verified: bool = False
+    name: str
+    role: Role
+
+
+class UserInternalUpdate(BaseModel):
+    """Body of PATCH /users/internal/by-id/{id}."""
+    email: Optional[EmailStr] = None
+    hashed_password: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_superuser: Optional[bool] = None
+    is_verified: Optional[bool] = None
+    name: Optional[str] = None
+    role: Optional[Role] = None

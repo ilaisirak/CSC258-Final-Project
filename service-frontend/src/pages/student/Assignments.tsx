@@ -21,24 +21,21 @@ export function StudentAssignmentsPage() {
 
   const filtered = useMemo(() => {
     if (!data) return [];
-    const now = Date.now();
     const sorted = [...data].sort(
       (a, b) =>
         new Date(a.assignment.dueAt).getTime() - new Date(b.assignment.dueAt).getTime(),
     );
+    // isOpen and isOverdue are computed by the assignment service so the
+    // backend remains the single source of truth for an assignment's state.
     switch (filter) {
       case "upcoming":
-        return sorted.filter(
-          (x) => new Date(x.assignment.dueAt).getTime() >= now && !x.submission,
-        );
+        return sorted.filter((x) => x.assignment.isOpen && !x.submission);
       case "submitted":
         return sorted.filter((x) => x.submission && !x.submission.grade);
       case "graded":
         return sorted.filter((x) => x.submission?.grade);
       case "overdue":
-        return sorted.filter(
-          (x) => new Date(x.assignment.dueAt).getTime() < now && !x.submission,
-        );
+        return sorted.filter((x) => x.assignment.isOverdue && !x.submission);
       default:
         return sorted;
     }
