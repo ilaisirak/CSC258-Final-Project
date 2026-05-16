@@ -37,7 +37,7 @@ Both roles use a single-page React frontend that communicates with a RESTful API
 
 ## Architecture Diagram
 
-![Architecture Diagram](docs/images/Architecture_Diagram.png)
+![Architecture Diagram](docs/images/Updated_Diagram.png)
 
 ---
 
