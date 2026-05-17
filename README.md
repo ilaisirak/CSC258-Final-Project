@@ -275,4 +275,3 @@ kind delete cluster --name csc258-final-project-cluster
 - Frontend development (React, routing, components, styling)
 - Frontend-backend integration, API adapters
 - Additional Microservices
-- 
