@@ -21,11 +21,14 @@ Both roles use a single-page React frontend that communicates with a RESTful API
 ## Architecture Highlights
 
 - **Domain-aligned microservices** — each service owns its own PostgreSQL database:
+  - `service-auth` — authentication
   - `service-user` — user accounts and search
-  - `service-class` — classes, rosters, enrollments
+  - `service-enrollment` — enrollments 
+  - `service-class` — classes, rosters
   - `service-assignment` — assignments
   - `service-submission` — file uploads (stored in MinIO)
   - `service-grade-records` — grades and feedback
+  - `service-file-storage` — manages databases
   - `service-frontend` — React/TypeScript app served by Nginx
 - **Per-service database with persistent storage** via Kubernetes StatefulSets and PVCs
 - **Connection pooling** via PgBouncer sidecars to keep database connections optimal when autoscaling
